@@ -1,0 +1,227 @@
+{
+  "generic": {
+    "rules": [
+      "Use natural, correct grammar and punctuation for the target language."
+    ],
+    "cps": 17,
+    "max_line": 42,
+    "length_ratio": [0.4, 2.5],
+    "verified": false,
+    "source": "generic"
+  },
+  "target": {
+    "ar": {
+      "rules": [
+        "Write Modern Standard Arabic (Fusha) as used in professional Arabic subtitles, with correct grammar, agreement and Arabic punctuation (\u060c \u061f)."
+      ],
+      "local_rules": [
+        "Write Modern Standard Arabic as used in professional subtitles: clear, natural, correct grammar and punctuation."
+      ],
+      "no_end": ["\u0623\u0646", "\u0623\u0648", "\u0625\u0630\u0627", "\u0625\u0644\u0649", "\u0625\u0646", "\u0628\u0639\u062f", "\u062a\u0644\u0643", "\u062b\u0645", "\u062d\u062a\u0649", "\u0630\u0644\u0643", "\u0639\u0644\u0649", "\u0639\u0646", "\u0641\u064a", "\u0642\u0628\u0644", "\u0643\u0644", "\u0644\u0627", "\u0644\u0643\u0646", "\u0644\u0645", "\u0644\u0646", "\u0645\u0627", "\u0645\u0639", "\u0645\u0646", "\u0647\u0630\u0627", "\u0647\u0630\u0647"],
+      "break_before": ["\u0623\u0648", "\u0625\u0630\u0627", "\u0628\u0639\u062f", "\u062b\u0645", "\u062d\u062a\u0649", "\u0639\u0646\u062f\u0645\u0627", "\u0641\u064a", "\u0642\u0628\u0644", "\u0644\u0623\u0646", "\u0644\u0643\u0646", "\u0645\u0639"],
+      "negation": ["\u0628\u062f\u0648\u0646", "\u063a\u064a\u0631", "\u0644\u0627", "\u0644\u0645", "\u0644\u0646", "\u0644\u064a\u0633", "\u0644\u064a\u0633\u062a", "\u0645\u0627", "\u0648\u0644\u0627"],
+      "cps": 17,
+      "max_line": 42,
+      "length_ratio": [0.4, 2.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "fr": {
+      "rules": [
+        "Choose between informal \"tu\" and formal \"vous\" from the relation of the speakers and keep each pair consistent.",
+        "Make adjectives and past participles agree in gender and number with the speaker or the addressee when known.",
+        "Put a space before ? ! : ; as French typography requires."
+      ],
+      "no_end": ["au", "aux", "avec", "car", "ce", "ces", "cet", "cette", "d", "dans", "de", "des", "du", "elle", "elles", "en", "et", "il", "ils", "je", "l", "la", "le", "les", "ma", "mais", "mes", "mon", "ne", "ni", "nous", "on", "ou", "par", "pour", "qu", "que", "sa", "ses", "son", "sous", "sur", "ta", "tes", "ton", "tu", "un", "une", "vous", "\u00e0"],
+      "break_before": ["avec", "car", "comme", "dans", "donc", "et", "lorsque", "mais", "ou", "par", "parce", "pour", "quand", "que", "si", "sous", "sur"],
+      "negation": ["aucun", "aucune", "jamais", "n", "ne", "ni", "pas", "personne", "rien", "sans"],
+      "cps": 17,
+      "max_line": 42,
+      "length_ratio": [0.4, 2.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "de": {
+      "rules": [
+        "Choose between informal \"du\" and formal \"Sie\" from the relation of the speakers and keep each pair consistent.",
+        "Use the grammatical gender of people (job titles, adjectives, pronouns) that matches the speaker or the addressee when known.",
+        "Write nouns with a capital letter."
+      ],
+      "no_end": ["aber", "als", "an", "auf", "aus", "bei", "das", "dass", "dem", "den", "denn", "der", "des", "die", "du", "ein", "eine", "einem", "einen", "einer", "er", "es", "f\u00fcr", "ich", "ihr", "in", "mit", "nach", "nicht", "oder", "sie", "um", "und", "von", "weil", "wenn", "wie", "wir", "zu"],
+      "break_before": ["aber", "als", "aus", "bei", "dann", "dass", "denn", "doch", "f\u00fcr", "mit", "nach", "oder", "und", "von", "weil", "wenn", "wie"],
+      "negation": ["kein", "keine", "keinem", "keinen", "nicht", "nichts", "nie", "niemals", "niemand", "ohne"],
+      "cps": 17,
+      "max_line": 42,
+      "length_ratio": [0.4, 2.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "ru": {
+      "rules": [
+        "Choose between informal \"ty\" and formal \"vy\" from the relation of the speakers and keep each pair consistent.",
+        "Make past-tense verbs and adjectives agree in gender and number with the speaker or the addressee when known."
+      ],
+      "no_end": ["\u0430", "\u0432", "\u0432\u044b", "\u0434\u0430", "\u0434\u043b\u044f", "\u0434\u043e", "\u0435\u0441\u043b\u0438", "\u0437\u0430", "\u0438", "\u0438\u0437", "\u0438\u043b\u0438", "\u043a", "\u043a\u0430\u043a", "\u043a\u043e\u0433\u0434\u0430", "\u043c\u044b", "\u043d\u0430", "\u043d\u0435", "\u043d\u0438", "\u043d\u043e", "\u043e", "\u043e\u043d", "\u043e\u043d\u0430", "\u043e\u043d\u0438", "\u043e\u0442", "\u043f\u043e", "\u0441", "\u0442\u044b", "\u0447\u0442\u043e", "\u0447\u0442\u043e\u0431\u044b", "\u044f"],
+      "break_before": ["\u0430", "\u0435\u0441\u043b\u0438", "\u0438", "\u0438\u043b\u0438", "\u043a\u0430\u043a", "\u043a\u043e\u0433\u0434\u0430", "\u043d\u043e", "\u043f\u043e\u0442\u043e\u043c\u0443", "\u0447\u0442\u043e", "\u0447\u0442\u043e\u0431\u044b"],
+      "negation": ["\u0431\u0435\u0437", "\u043d\u0435", "\u043d\u0435\u0442", "\u043d\u0438", "\u043d\u0438\u043a\u043e\u0433\u0434\u0430", "\u043d\u0438\u043a\u0442\u043e", "\u043d\u0438\u0447\u0435\u0433\u043e"],
+      "cps": 17,
+      "max_line": 42,
+      "length_ratio": [0.4, 2.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "es": {
+      "rules": [
+        "Choose between informal \"t\u00fa\" and formal \"usted\" from the relation of the speakers and keep each pair consistent.",
+        "Make adjectives and participles agree in gender and number with the speaker or the addressee when known.",
+        "Open questions and exclamations with \u00bf and \u00a1 as well as closing them with ? and !."
+      ],
+      "no_end": ["al", "con", "de", "del", "e", "el", "ella", "en", "la", "las", "los", "mi", "mis", "no", "o", "para", "pero", "por", "que", "si", "sin", "sobre", "su", "sus", "tu", "tus", "t\u00fa", "u", "un", "una", "unas", "unos", "y", "yo", "\u00e9l"],
+      "break_before": ["como", "con", "cuando", "e", "o", "para", "pero", "por", "porque", "que", "si", "sin", "sobre", "y"],
+      "negation": ["jam\u00e1s", "nada", "nadie", "ni", "ninguna", "ninguno", "ning\u00fan", "no", "nunca", "sin"],
+      "cps": 17,
+      "max_line": 42,
+      "length_ratio": [0.4, 2.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "tr": {
+      "rules": [
+        "Choose between informal \"sen\" and formal \"siz\" from the relation of the speakers and keep each pair consistent.",
+        "Follow vowel harmony in suffixes and separate suffixes from names with an apostrophe."
+      ],
+      "no_end": ["ama", "bir", "bu", "e\u011fer", "fakat", "hem", "ki", "ne", "o", "ve", "veya", "ya", "\u00e7\u00fcnk\u00fc", "\u015fu"],
+      "break_before": ["ama", "e\u011fer", "fakat", "ki", "ve", "veya", "\u00e7\u00fcnk\u00fc"],
+      "negation": ["asla", "de\u011fil", "de\u011fildir", "hay\u0131r", "hi\u00e7", "ne", "yok"],
+      "cps": 17,
+      "max_line": 42,
+      "length_ratio": [0.4, 2.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "en": {
+      "rules": [
+        "English has one word for \"you\": convey formality and intimacy through the wording instead.",
+        "Use natural contemporary English and standard English punctuation."
+      ],
+      "no_end": ["a", "an", "and", "are", "at", "be", "but", "by", "for", "from", "he", "her", "his", "i", "in", "is", "it", "its", "my", "nor", "not", "of", "on", "or", "our", "she", "that", "the", "their", "these", "they", "this", "those", "to", "was", "we", "were", "with", "you", "your"],
+      "break_before": ["and", "at", "because", "but", "for", "from", "if", "in", "of", "on", "or", "so", "than", "that", "to", "when", "which", "while", "who", "with"],
+      "negation": ["aren't", "can't", "cannot", "didn't", "doesn't", "don't", "isn't", "neither", "never", "no", "nobody", "none", "nor", "not", "nothing", "wasn't", "without", "won't"],
+      "cps": 17,
+      "max_line": 42,
+      "length_ratio": [0.4, 2.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "he": {
+      "rules": [
+        "Make verbs and adjectives agree in gender with the speaker and the addressee, including in the second person.",
+        "Write without niqqud (vowel points)."
+      ],
+      "no_end": ["\u05d0\u05d1\u05dc", "\u05d0\u05d5", "\u05d0\u05dc", "\u05d0\u05dd", "\u05d0\u05e0\u05d9", "\u05d0\u05ea", "\u05d0\u05ea\u05d4", "\u05d4\u05d5\u05d0", "\u05d4\u05d9\u05d0", "\u05db\u05d9", "\u05dc\u05d0", "\u05de\u05df", "\u05e2\u05dc", "\u05e2\u05dd", "\u05e9\u05dc"],
+      "break_before": ["\u05d0\u05d1\u05dc", "\u05d0\u05d5", "\u05d0\u05d6", "\u05d0\u05dd", "\u05db\u05d9", "\u05db\u05e9", "\u05e2\u05dc", "\u05e2\u05dd"],
+      "negation": ["\u05d0\u05d9\u05df", "\u05d0\u05e3", "\u05d1\u05dc\u05d9", "\u05dc\u05d0"],
+      "cps": 17,
+      "max_line": 42,
+      "length_ratio": [0.4, 2.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "fa": {
+      "rules": [
+        "Choose between informal \"to\" and formal \"shoma\" from the relation of the speakers and keep each pair consistent.",
+        "Use the Persian comma (\u060c) and question mark (\u061f), and the Persian letters \u06cc and \u06a9 instead of the Arabic \u064a and \u0643."
+      ],
+      "no_end": ["\u0627\u0632", "\u0627\u0645\u0627", "\u0627\u06af\u0631", "\u0628\u0627", "\u0628\u0631\u0627\u06cc", "\u0628\u0647", "\u062f\u0631", "\u0631\u0627", "\u0646\u0647", "\u0647\u0645", "\u0648", "\u06a9\u0647", "\u06cc\u0627"],
+      "break_before": ["\u0627\u0645\u0627", "\u0627\u06af\u0631", "\u0648\u0644\u06cc", "\u0686\u0648\u0646", "\u06a9\u0647", "\u06cc\u0627"],
+      "negation": ["\u0628\u062f\u0648\u0646", "\u0646\u0645\u06cc", "\u0646\u0647", "\u0646\u06cc\u0633\u062a", "\u0647\u06cc\u0686"],
+      "cps": 17,
+      "max_line": 42,
+      "length_ratio": [0.4, 2.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "zh": {
+      "rules": [
+        "Use full-width punctuation (\uff0c \u3002 \uff1f \uff01).",
+        "Keep each line to about 16 characters and break lines at natural phrase boundaries.",
+        "Write in one script variant (Simplified or Traditional) consistently."
+      ],
+      "negation": ["\u4e0d", "\u522b", "\u65e0", "\u672a", "\u6ca1", "\u975e"],
+      "cps": 17,
+      "max_line": 16,
+      "length_ratio": [0.2, 1.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "ja": {
+      "rules": [
+        "Use full-width punctuation (\u3001 \u3002 \uff1f \uff01).",
+        "Keep each line to about 16 characters and break lines at natural phrase boundaries.",
+        "Choose the speech level (polite or plain) from the relation of the speakers and keep it consistent."
+      ],
+      "negation": ["\u3058\u3083\u306a\u3044", "\u305a", "\u306a\u3044", "\u306a\u304b\u3063\u305f", "\u307e\u305b\u3093"],
+      "cps": 17,
+      "max_line": 16,
+      "length_ratio": [0.2, 1.5],
+      "verified": false,
+      "source": "generic"
+    },
+    "ko": {
+      "rules": [
+        "Choose the speech level (formal, polite or casual) from the relation of the speakers and keep it consistent.",
+        "Keep each line short, about 16 characters, and break lines at natural phrase boundaries."
+      ],
+      "negation": ["\ubabb", "\uc544\ub2c8", "\uc548", "\uc54a", "\uc5c6"],
+      "cps": 17,
+      "max_line": 16,
+      "length_ratio": [0.2, 1.5],
+      "verified": false,
+      "source": "generic"
+    }
+  },
+  "source": {
+    "tr": {
+      "notes": [
+        "Kinship terms (abi, abla, day\u0131, amca, yeni\u011fenim) are often forms of address, not literal relations: translate them as natural address forms in the target language."
+      ],
+      "negation": ["de\u011fil", "yok", "-ma", "-me"]
+    },
+    "en": {
+      "negation": ["cannot", "neither", "never", "no", "nobody", "none", "nor", "not", "nothing", "without"]
+    },
+    "fr": {
+      "negation": ["aucun", "aucune", "jamais", "n", "ne", "ni", "pas", "personne", "rien", "sans"]
+    },
+    "de": {
+      "negation": ["kein", "keine", "keinem", "keinen", "nicht", "nichts", "nie", "niemals", "niemand", "ohne"]
+    },
+    "es": {
+      "negation": ["jam\u00e1s", "nada", "nadie", "ni", "ninguna", "ninguno", "ning\u00fan", "no", "nunca", "sin"]
+    },
+    "it": {
+      "negation": ["mai", "nessuna", "nessuno", "niente", "non", "n\u00e9", "senza"]
+    },
+    "pt": {
+      "negation": ["jamais", "nada", "nem", "ningu\u00e9m", "nunca", "n\u00e3o", "sem"]
+    },
+    "nl": {
+      "negation": ["geen", "niemand", "niet", "niets", "noch", "nooit", "zonder"]
+    },
+    "pl": {
+      "negation": ["ani", "bez", "nic", "nie", "nigdy", "nikt"]
+    },
+    "ru": {
+      "negation": ["\u0431\u0435\u0437", "\u043d\u0435", "\u043d\u0435\u0442", "\u043d\u0438", "\u043d\u0438\u043a\u043e\u0433\u0434\u0430", "\u043d\u0438\u043a\u0442\u043e", "\u043d\u0438\u0447\u0435\u0433\u043e"]
+    },
+    "ar": {
+      "negation": ["\u0628\u062f\u0648\u0646", "\u063a\u064a\u0631", "\u0644\u0627", "\u0644\u0645", "\u0644\u0646", "\u0644\u064a\u0633", "\u0644\u064a\u0633\u062a", "\u0645\u0627"]
+    },
+    "he": {
+      "negation": ["\u05d0\u05d9\u05df", "\u05d0\u05e3", "\u05d1\u05dc\u05d9", "\u05dc\u05d0"]
+    },
+    "fa": {
+      "negation": ["\u0628\u062f\u0648\u0646", "\u0646\u0645\u06cc", "\u0646\u0647", "\u0646\u06cc\u0633\u062a", "\u0647\u06cc\u0686"]
+    }
+  }
+}

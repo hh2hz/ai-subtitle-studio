@@ -1,0 +1,46 @@
+# --- Secrets: never commit these -------------------------------------------------
+api_keys.local.json
+api_keys.json
+*_api_keys.json
+.env
+.env.*
+
+# Directory names are anchored with a leading slash: an unanchored "models/" also hid the package app/models.
+# --- Local data and outputs ------------------------------------------------------
+.appdata/
+/output/
+/evaluation/
+/models/
+/cache/
+/jobs/
+/logs/
+*.db
+*.db-wal
+*.db-shm
+provider_health.json
+
+# --- Tools and build products ----------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+/build/
+/dist/
+*.spec
+!packaging/aistudio.spec
+*.exe
+*.msi
+*.zip
+
+# --- Test and editor leftovers ---------------------------------------------------
+.pytest_cache/
+.pytest_tmp/
+.pytest_tmp*/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+desktop.ini

@@ -1,0 +1,7 @@
+# Optional: NVIDIA runtime libraries for GPU transcription (about 1.2 GB download).
+# CTranslate2 4.8.2 links against cuBLAS for CUDA 12 and loads cuDNN 9.
+# The llama.cpp CUDA build (local translation model) also needs the CUDA runtime (cudart64_12.dll).
+# License: NVIDIA proprietary (free redistribution via PyPI). Requires an NVIDIA driver supporting CUDA 12.
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cudnn-cu12==9.27.0.42
+nvidia-cuda-runtime-cu12==12.9.79

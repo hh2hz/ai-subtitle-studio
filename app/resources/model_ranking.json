@@ -1,0 +1,329 @@
+{
+  "version": 1,
+  "_comment": "Scores 0-100 from tools/benchmark_models.py on 25 lines of Kurtlar Vadisi 61 (Turkish to Arabic, correct mode, 2026-10-03), graded line by line: 4 points per acceptable line, minus up to 4 for output tokens (1 per 1000) and 4 if the request took over 60 s. The local draft alone had 15/25 acceptable lines. One block, one run per model: a rough ranking, not a precise measurement. Models not listed use a name heuristic. floor = minimum score allowed to correct translations (78: at least 20/25 lines without a large token cost).",
+  "floor": 78,
+  "models": {
+    "gemini:gemini-3.5-flash": {
+      "score": 99.6,
+      "correct_lines": "25/25",
+      "output_tokens": 379,
+      "seconds": 36.5
+    },
+    "gemini:gemini-3-flash-preview": {
+      "score": 95.7,
+      "correct_lines": "24/25",
+      "output_tokens": 336,
+      "seconds": 2.5
+    },
+    "gemini:gemini-flash-latest": {
+      "score": 95.6,
+      "correct_lines": "24/25",
+      "output_tokens": 442,
+      "seconds": 4.6
+    },
+    "cohere:command-a-03-2025": {
+      "score": 91.6,
+      "correct_lines": "23/25",
+      "output_tokens": 430,
+      "seconds": 8.2
+    },
+    "gemini:gemini-3.7-flash": {
+      "score": 91.5,
+      "correct_lines": "23/25",
+      "output_tokens": 530,
+      "seconds": 4.4
+    },
+    "gemini:gemini-3.1-flash-lite": {
+      "score": 91.5,
+      "correct_lines": "23/25",
+      "output_tokens": 513,
+      "seconds": 8.0
+    },
+    "gemini:gemma-4-31b-it": {
+      "score": 87.7,
+      "correct_lines": "23/25",
+      "output_tokens": 301,
+      "seconds": 105.7
+    },
+    "nvidia:google/gemma-4-31b-it": {
+      "score": 87.7,
+      "correct_lines": "23/25",
+      "output_tokens": 348,
+      "seconds": 125.5
+    },
+    "gemini:gemini-3.1-flash-lite-preview": {
+      "score": 87.5,
+      "correct_lines": "22/25",
+      "output_tokens": 514,
+      "seconds": 3.5
+    },
+    "gemini:gemini-3.8-flash": {
+      "score": 87.2,
+      "correct_lines": "22/25",
+      "output_tokens": 779,
+      "seconds": 3.6
+    },
+    "nvidia:moonshotai/kimi-k3": {
+      "score": 83.4,
+      "correct_lines": "21/25",
+      "output_tokens": 635,
+      "seconds": 23.5
+    },
+    "gemini:gemma-4-26b-a4b-it": {
+      "score": 79.7,
+      "correct_lines": "20/25",
+      "output_tokens": 284,
+      "seconds": 7.7
+    },
+    "cohere:command-a-translate-08-2025": {
+      "score": 79.7,
+      "correct_lines": "20/25",
+      "output_tokens": 266,
+      "seconds": 3.9
+    },
+    "cohere:north-small-translate-09-2026": {
+      "score": 79.4,
+      "correct_lines": "20/25",
+      "output_tokens": 566,
+      "seconds": 3.3
+    },
+    "groq:openai/gpt-oss-120b": {
+      "score": 78.4,
+      "correct_lines": "20/25",
+      "output_tokens": 1609,
+      "seconds": 3.7
+    },
+    "cloudflare:@cf/openai/gpt-oss-120b": {
+      "score": 77.3,
+      "correct_lines": "20/25",
+      "output_tokens": 2675,
+      "seconds": 16.4
+    },
+    "nvidia:meta/muse-glimmer-30b": {
+      "score": 76.3,
+      "correct_lines": "21/25",
+      "output_tokens": 3721,
+      "seconds": 127.0
+    },
+    "nvidia:nvidia/ising-calibration-1.5-31b": {
+      "score": 75.5,
+      "correct_lines": "19/25",
+      "output_tokens": 513,
+      "seconds": 31.2
+    },
+    "nvidia:google/diffusiongemma-26b-a4b-it": {
+      "score": 75.4,
+      "correct_lines": "19/25",
+      "output_tokens": 576,
+      "seconds": 1.8
+    },
+    "nvidia:openai/gpt-oss-20b": {
+      "score": 73.6,
+      "correct_lines": "19/25",
+      "output_tokens": 2406,
+      "seconds": 37.2
+    },
+    "kilo:nvidia/nemotron-3-ultra-550b-a55b:free": {
+      "score": 73.2,
+      "correct_lines": "19/25",
+      "output_tokens": 2792,
+      "seconds": 36.8
+    },
+    "kilo:inclusionai/ling-3.0-flash-sante:free": {
+      "score": 72.6,
+      "correct_lines": "19/25",
+      "output_tokens": 3444,
+      "seconds": 14.6
+    },
+    "cloudflare:@cf/openai/gpt-oss-20b": {
+      "score": 72.0,
+      "correct_lines": "19/25",
+      "output_tokens": 4440,
+      "seconds": 34.8
+    },
+    "cloudflare:@cf/nvidia/nemotron-3-120b-a12b": {
+      "score": 72.0,
+      "correct_lines": "19/25",
+      "output_tokens": 4495,
+      "seconds": 33.7
+    },
+    "kilo:nvidia/nemotron-3-super-120b-a12b:free": {
+      "score": 72.0,
+      "correct_lines": "19/25",
+      "output_tokens": 3961,
+      "seconds": 28.5
+    },
+    "nvidia:nvidia/nemotron-3-ultra-550b-a55b": {
+      "score": 72.0,
+      "correct_lines": "20/25",
+      "output_tokens": 4355,
+      "seconds": 69.8
+    },
+    "cohere:north-mini-code-1-0": {
+      "score": 68.6,
+      "correct_lines": "18/25",
+      "output_tokens": 3429,
+      "seconds": 20.6
+    },
+    "cloudflare:@cf/meta/llama-3.3-70b-instruct-fp8-fast": {
+      "score": 67.5,
+      "correct_lines": "17/25",
+      "output_tokens": 481,
+      "seconds": 8.8
+    },
+    "cloudflare:@cf/aisingapore/gemma-sea-lion-v4-27b-it": {
+      "score": 64.0,
+      "correct_lines": "16/25",
+      "output_tokens": 37,
+      "seconds": 1.1
+    },
+    "cloudflare:@cf/meta/llama-4-scout-17b-16e-instruct": {
+      "score": 63.8,
+      "correct_lines": "16/25",
+      "output_tokens": 239,
+      "seconds": 4.5
+    },
+    "groq:openai/gpt-oss-20b": {
+      "score": 62.7,
+      "correct_lines": "16/25",
+      "output_tokens": 1297,
+      "seconds": 2.1
+    },
+    "cloudflare:@cf/qwen/qwq-32b": {
+      "score": 61.7,
+      "correct_lines": "17/25",
+      "output_tokens": 2301,
+      "seconds": 67.4
+    },
+    "cloudflare:@cf/qwen/qwen3-30b-a3b-fp8": {
+      "score": 61.5,
+      "correct_lines": "16/25",
+      "output_tokens": 2458,
+      "seconds": 14.6
+    },
+    "cohere:tiny-aya-earth": {
+      "score": 60.0,
+      "correct_lines": "15/25",
+      "output_tokens": 10,
+      "seconds": 0.7
+    },
+    "cohere:tiny-aya-fire": {
+      "score": 60.0,
+      "correct_lines": "15/25",
+      "output_tokens": 10,
+      "seconds": 0.7
+    },
+    "cohere:tiny-aya-global": {
+      "score": 60.0,
+      "correct_lines": "15/25",
+      "output_tokens": 10,
+      "seconds": 0.7
+    },
+    "cohere:tiny-aya-water": {
+      "score": 60.0,
+      "correct_lines": "15/25",
+      "output_tokens": 10,
+      "seconds": 0.7
+    },
+    "kilo:openrouter/free": {
+      "score": 60.0,
+      "correct_lines": "16/25",
+      "output_tokens": 4771,
+      "seconds": 40.7
+    },
+    "kilo:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": {
+      "score": 60.0,
+      "correct_lines": "17/25",
+      "output_tokens": 5241,
+      "seconds": 116.2
+    },
+    "kilo:cohere/north-mini-code:free": {
+      "score": 60.0,
+      "correct_lines": "16/25",
+      "output_tokens": 5162,
+      "seconds": 40.0
+    },
+    "cloudflare:@cf/mistral/mistral-7b-instruct-v0.2-lora": {
+      "score": 59.9,
+      "correct_lines": "15/25",
+      "output_tokens": 66,
+      "seconds": 4.3
+    },
+    "gemini:gemini-flash-lite-latest": {
+      "score": 59.6,
+      "correct_lines": "15/25",
+      "output_tokens": 433,
+      "seconds": 2.0
+    },
+    "gemini:gemini-3.5-flash-lite": {
+      "score": 59.5,
+      "correct_lines": "15/25",
+      "output_tokens": 478,
+      "seconds": 2.9
+    },
+    "cloudflare:@cf/meta/llama-3.2-3b-instruct": {
+      "score": 59.5,
+      "correct_lines": "15/25",
+      "output_tokens": 533,
+      "seconds": 2.4
+    },
+    "llm7:mistral-Nemo-Instruct-2407": {
+      "score": 59.5,
+      "correct_lines": "15/25",
+      "output_tokens": 486,
+      "seconds": 24.2
+    },
+    "llm7:codestral-latest": {
+      "score": 59.4,
+      "correct_lines": "15/25",
+      "output_tokens": 613,
+      "seconds": 5.3
+    },
+    "kilo:poolside/laguna-s-2.1:free": {
+      "score": 59.2,
+      "correct_lines": "15/25",
+      "output_tokens": 810,
+      "seconds": 21.7
+    },
+    "cloudflare:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b": {
+      "score": 58.5,
+      "correct_lines": "15/25",
+      "output_tokens": 1532,
+      "seconds": 50.6
+    },
+    "kilo:poolside/laguna-xs-2.1:free": {
+      "score": 57.5,
+      "correct_lines": "15/25",
+      "output_tokens": 2493,
+      "seconds": 22.4
+    },
+    "cloudflare:@cf/ibm-granite/granite-4.0-h-micro": {
+      "exclude": true,
+      "reason": "benchmark 13/25: made the local translation worse"
+    },
+    "cloudflare:@cf/mistralai/mistral-small-3.1-24b-instruct": {
+      "exclude": true,
+      "reason": "benchmark 13/25: made the local translation worse"
+    },
+    "cloudflare:@cf/meta/llama-3.1-8b-instruct-fp8": {
+      "exclude": true,
+      "reason": "benchmark 8/25: made the local translation worse"
+    },
+    "cloudflare:@cf/google/gemma-2b-it-lora": {
+      "exclude": true,
+      "reason": "benchmark 0/25: made the local translation worse"
+    },
+    "kilo:liquid/lfm-2.5-2.6b:free": {
+      "exclude": true,
+      "reason": "benchmark 14/25: made the local translation worse"
+    },
+    "nvidia:poolside/laguna-xs-2.1": {
+      "exclude": true,
+      "reason": "benchmark 14/25: made the local translation worse"
+    },
+    "llm7:nemotron-3-nano:30b": {
+      "exclude": true,
+      "reason": "benchmark 14/25: made the local translation worse"
+    }
+  }
+}

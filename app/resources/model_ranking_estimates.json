@@ -1,0 +1,671 @@
+{
+  "version": 1,
+  "_comment": "Estimated quality scores (0-100) for models that tools/benchmark_models.py has not measured yet. They come from the model-name/size/family ranking used by the local gateway (model-rank.js), mapped onto the benchmark scale: a model strong enough to judge the local translation lands at or above the floor, a small or old one below it. Run tools/benchmark_models.py to replace an estimate with a real measurement - a measured score in model_ranking.json always wins over an estimate here.",
+  "floor": 78,
+  "models": {
+    "mistral:mistral-small-latest": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:codestral-latest": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:open-mistral-nemo": {
+      "score": 64.7,
+      "estimated": true
+    },
+    "mistral:pixtral-12b-2409": {
+      "score": 66.5,
+      "estimated": true
+    },
+    "mistral:codestral-2508": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:mistral-code-latest": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:mistral-small-2603": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:mistral-vibe-cli-fast": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:magistral-small-latest": {
+      "score": 71,
+      "estimated": true
+    },
+    "mistral:mistral-large-2512": {
+      "score": 78.2,
+      "estimated": true
+    },
+    "mistral:mistral-large-latest": {
+      "score": 78.2,
+      "estimated": true
+    },
+    "mistral:ministral-3b-2512": {
+      "score": 62.9,
+      "estimated": true
+    },
+    "mistral:ministral-3b-latest": {
+      "score": 62.9,
+      "estimated": true
+    },
+    "mistral:ministral-8b-2512": {
+      "score": 73.7,
+      "estimated": true
+    },
+    "mistral:ministral-8b-latest": {
+      "score": 73.7,
+      "estimated": true
+    },
+    "mistral:ministral-14b-2512": {
+      "score": 71.9,
+      "estimated": true
+    },
+    "mistral:ministral-14b-latest": {
+      "score": 71.9,
+      "estimated": true
+    },
+    "mistral:mistral-medium-latest": {
+      "score": 74.6,
+      "estimated": true
+    },
+    "mistral:mistral-medium": {
+      "score": 74.6,
+      "estimated": true
+    },
+    "mistral:mistral-medium-3-5": {
+      "score": 74.6,
+      "estimated": true
+    },
+    "mistral:mistral-medium-3.5": {
+      "score": 74.6,
+      "estimated": true
+    },
+    "mistral:mistral-medium-3": {
+      "score": 74.6,
+      "estimated": true
+    },
+    "mistral:mistral-medium-2604": {
+      "score": 74.6,
+      "estimated": true
+    },
+    "mistral:mistral-vibe-cli-latest": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:magistral-medium-latest": {
+      "score": 80,
+      "estimated": true
+    },
+    "mistral:glm-5-2": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:zai-glm-5-2": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:zai-glm-5-3": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:zai-glm-5": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:zai-glm-latest": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:mistral-code-fim-latest": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:voxtral-small-2507": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:voxtral-small-latest": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "mistral:mistral-vibe-cli-with-tools": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "groq:allam-2-7b": {
+      "score": 63.3,
+      "estimated": true
+    },
+    "groq:qwen/qwen3.8-27b": {
+      "score": 84,
+      "estimated": true
+    },
+    "gemini:gemini-3.6-flash": {
+      "score": 74.6,
+      "estimated": true
+    },
+    "gemini:gemini-pro-latest": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "gemini:gemini-3.1-pro-preview": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "gemini:gemini-3.1-pro-preview-customtools": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "gemini:gemini-omni-flash-preview": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "gemini:gemini-omni-1.1-flash": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "cloudflare:@cf/meta/llama-3.2-1b-instruct": {
+      "score": 62.9,
+      "estimated": true
+    },
+    "cloudflare:@cf/qwen/qwen3.8-27b": {
+      "score": 83.6,
+      "estimated": true
+    },
+    "cloudflare:@cf/zai-org/glm-4.7-flash": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "cloudflare:@cf/google/gemma-4-26b-a4b-it": {
+      "score": 71,
+      "estimated": true
+    },
+    "cloudflare:@cf/google/gemma-7b-it-lora": {
+      "score": 58.4,
+      "estimated": true
+    },
+    "cloudflare:@cf/meta-llama/llama-2-7b-chat-hf-lora": {
+      "score": 58.4,
+      "estimated": true
+    },
+    "cloudflare:@cf/moondream/moondream3.1-9B-A2B": {
+      "score": 71,
+      "estimated": true
+    },
+    "aionlabs:aion-labs/aion-3.5": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "aionlabs:aion-labs/aion-3.5-mini": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "aionlabs:aion-labs/aion-3.0": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "aionlabs:aion-labs/aion-3.0-mini": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "aionlabs:aion-labs/aion-2.0": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "aionlabs:aion-labs/aion-rp-llama-3.1-8b": {
+      "score": 65.1,
+      "estimated": true
+    },
+    "nvidia:nvidia/nemotron-3-super-120b-a12b": {
+      "score": 76.4,
+      "estimated": true
+    },
+    "nvidia:nvidia/nemotron-3.5-lightning-30b-a3b": {
+      "score": 68.3,
+      "estimated": true
+    },
+    "nvidia:nvidia/riva-translate-4b-instruct-v2": {
+      "score": 58,
+      "estimated": true
+    },
+    "kilo:nvidia/nemotron-3.5-lightning:free": {
+      "score": 69.6,
+      "estimated": true
+    },
+    "kilo:stepfun/step-3.7-flash:free": {
+      "score": 74.1,
+      "estimated": true
+    },
+    "kilo:dots-studio/dots-3-note-preview:free": {
+      "score": 71.4,
+      "estimated": true
+    },
+    "kilo:apodex/apodex-1.1-mini:free": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "kilo:kilo-auto/free": {
+      "score": 67.4,
+      "estimated": true
+    },
+    "kilo:thinkingmachines/inkling-small:free": {
+      "score": 73.2,
+      "estimated": true
+    },
+    "kilo:kilo-auto/small": {
+      "score": 67.4,
+      "estimated": true
+    },
+    "kilo:inclusionai/ling-3.1-flash": {
+      "score": 70.1,
+      "estimated": true
+    },
+    "openrouter:nvidia/nemotron-3.5-lightning:free": {
+      "score": 69.6,
+      "estimated": true
+    },
+    "openrouter:nvidia/nemotron-3-super-120b-a12b:free": {
+      "score": 78.6,
+      "estimated": true
+    },
+    "openrouter:dots-studio/dots-3-note-preview:free": {
+      "score": 71.4,
+      "estimated": true
+    },
+    "openrouter:liquid/lfm-2.5-2.6b:free": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "openrouter:cohere/north-mini-code:free": {
+      "score": 71.4,
+      "estimated": true
+    },
+    "openrouter:openrouter/free": {
+      "score": 67.4,
+      "estimated": true
+    },
+    "openrouter:deepseek/deepseek-r1": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "openrouter:inclusionai/ling-3.1-flash": {
+      "score": 70.1,
+      "estimated": true
+    },
+    "openrouter:apodex/apodex-1.1-mini:free": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "openrouter:inclusionai/ling-3.0-flash-sante:free": {
+      "score": 71.4,
+      "estimated": true
+    },
+    "openrouter:poolside/laguna-s-2.1:free": {
+      "score": 71.4,
+      "estimated": true
+    },
+    "openrouter:poolside/laguna-xs-2.1:free": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free": {
+      "score": 90,
+      "estimated": true
+    },
+    "openrouter:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": {
+      "score": 72.3,
+      "estimated": true
+    },
+    "openrouter:google/gemma-4-26b-a4b-it:free": {
+      "score": 70.5,
+      "estimated": true
+    },
+    "openrouter:google/gemma-4-31b-it:free": {
+      "score": 72.3,
+      "estimated": true
+    },
+    "cohere:command-a-plus-05-2026": {
+      "score": 64.2,
+      "estimated": true
+    },
+    "cohere:command-a-reasoning-08-2025": {
+      "score": 66,
+      "estimated": true
+    },
+    "cohere:command-r-plus-08-2024": {
+      "score": 64.2,
+      "estimated": true
+    },
+    "cohere:command-r-08-2024": {
+      "score": 64.2,
+      "estimated": true
+    },
+    "cohere:command-r7b-12-2024": {
+      "score": 64.2,
+      "estimated": true
+    },
+    "cohere:c4ai-aya-expanse-32b": {
+      "score": 60.6,
+      "estimated": true
+    },
+    "cohere:command-r7b-arabic-02-2025": {
+      "score": 64.2,
+      "estimated": true
+    },
+    "ovh:Qwen3.5-397B-A17B": {
+      "score": 79.1,
+      "estimated": true
+    },
+    "ovh:Meta-Llama-3_3-70B-Instruct": {
+      "score": 75.5,
+      "estimated": true
+    },
+    "ovh:Qwen3.6-27B": {
+      "score": 71,
+      "estimated": true
+    },
+    "ovh:Mistral-Small-3.2-24B-Instruct-2506": {
+      "score": 71,
+      "estimated": true
+    },
+    "ovh:gpt-oss-20b": {
+      "score": 71,
+      "estimated": true
+    },
+    "ovh:gpt-oss-120b": {
+      "score": 86.3,
+      "estimated": true
+    },
+    "ovh:Qwen3.5-9B": {
+      "score": 67.4,
+      "estimated": true
+    },
+    "ovh:Mistral-7B-Instruct-v0.3": {
+      "score": 65.6,
+      "estimated": true
+    },
+    "ovh:Qwen3.8-27B": {
+      "score": 71,
+      "estimated": true
+    },
+    "ovh:Mistral-Nemo-Instruct-2407": {
+      "score": 65.6,
+      "estimated": true
+    },
+    "unturf:turboderp/Qwen3.8-27B-exl3": {
+      "score": 71.9,
+      "estimated": true
+    },
+    "llmtech:nvidia/Qwen3.8-27B-NVFP4": {
+      "score": 69.6,
+      "estimated": true
+    },
+    "zai:glm-4.7-flash": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "zai:glm-4.5-flash": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "zai:glm-4.6v-flash": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "zai:glm-4.5": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "zai:glm-4.5-air": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "zai:glm-4.6": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "zai:glm-4.7": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "zai:glm-5": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "zai:glm-5-turbo": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "zai:glm-5.1": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "zai:glm-5.2": {
+      "score": 79.5,
+      "estimated": true
+    },
+    "zai:glm-5.3": {
+      "score": 79.5,
+      "estimated": true
+    },
+    "zai:glm-5.3-flash": {
+      "score": 73.2,
+      "estimated": true
+    },
+    "zai:glm-5.3-flashx": {
+      "score": 73.2,
+      "estimated": true
+    },
+    "requesty:poolside/laguna-xs.2": {
+      "score": 66.9,
+      "estimated": true
+    },
+    "requesty:openai/gpt-5.3-codex": {
+      "score": 66.9,
+      "estimated": true
+    },
+    "requesty:openai/o4-mini:medium": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "aihubmix:xiaomi-mimo-v2.6-pro-free": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "aihubmix:xiaomi-mimo-v2.6-flash-free": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "aihubmix:agents-a1-free": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "aihubmix:intern-s2-free": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "aihubmix:dots-3-note-preview-free": {
+      "score": 71.4,
+      "estimated": true
+    },
+    "aihubmix:lfm-2.5-2.6b-free": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "aihubmix:nemotron-3.5-lightning-free": {
+      "score": 69.6,
+      "estimated": true
+    },
+    "routeway:deepseek-v4-flash:free": {
+      "score": 76.8,
+      "estimated": true
+    },
+    "routeway:minimax-m2.7:free": {
+      "score": 67.8,
+      "estimated": true
+    },
+    "routeway:muse-glimmer-30b:free": {
+      "score": 75,
+      "estimated": true
+    },
+    "routeway:gemma-4-26b-a4b-it-chimerax:free": {
+      "score": 69.6,
+      "estimated": true
+    },
+    "routeway:gemma-4-26b-a4b-it-luminous:free": {
+      "score": 69.6,
+      "estimated": true
+    },
+    "routeway:gemma-4-26b-a4b-it-moonlight:free": {
+      "score": 69.6,
+      "estimated": true
+    },
+    "llmtr:agnes-3.0-flash": {
+      "score": 66,
+      "estimated": true
+    },
+    "llmtr:agnes-2.5-flash": {
+      "score": 66,
+      "estimated": true
+    },
+    "llmtr:ling-3.1-flash": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "llmtr:nvidia/nemotron-3-ultra-550b-a55b": {
+      "score": 88.5,
+      "estimated": true
+    },
+    "llmtr:poolside/laguna-xs-2.1": {
+      "score": 66,
+      "estimated": true
+    },
+    "llmtr:qwen/qwen3.8-27b-free": {
+      "score": 81.8,
+      "estimated": true
+    },
+    "llmtr:nvidia/nemotron-3-super-120b-a12b": {
+      "score": 75.9,
+      "estimated": true
+    },
+    "llmtr:inclusionai/ling-3.1-flash": {
+      "score": 68.7,
+      "estimated": true
+    },
+    "llmtr:agnes/agnes-3.0-flash": {
+      "score": 66,
+      "estimated": true
+    },
+    "llmtr:agnes/agnes-2.5-flash": {
+      "score": 66,
+      "estimated": true
+    },
+    "llmtr:tesseracted/kolibri-1": {
+      "score": 66,
+      "estimated": true
+    },
+    "llm7:GLM-5.3-Flash": {
+      "score": 66.9,
+      "estimated": true
+    },
+    "llm7:DeepSeek-V4-Flash-0731": {
+      "score": 66.9,
+      "estimated": true
+    },
+    "sealion:aisingapore/Gemma-SEA-LION-v4-27B-IT": {
+      "score": 71.4,
+      "estimated": true
+    },
+    "sealion:aisingapore/Llama-SEA-LION-v3-70B-IT": {
+      "score": 75.9,
+      "estimated": true
+    },
+    "sealion:aisingapore/Qwen-SEA-LION-v4.5-27B-IT": {
+      "score": 71.4,
+      "estimated": true
+    },
+    "sealion:aisingapore/Qwen-SEA-LION-v4-32B-IT": {
+      "score": 73.2,
+      "estimated": true
+    },
+    "sealion:aisingapore/Nemotron-SEA-LION-v4.8-120B-A12B": {
+      "score": 77.7,
+      "estimated": true
+    },
+    "ollama:gpt-oss:120b": {
+      "score": 80,
+      "estimated": true
+    },
+    "ollama:gpt-oss:20b": {
+      "score": 73.7,
+      "estimated": true
+    },
+    "ollama:nemotron-3-ultra": {
+      "score": 75.5,
+      "estimated": true
+    },
+    "ollama:nemotron-3-super": {
+      "score": 72.8,
+      "estimated": true
+    },
+    "ollama:nemotron-3-nano:30b": {
+      "score": 76.4,
+      "estimated": true
+    },
+    "ollama:gemma4:31b": {
+      "score": 69.2,
+      "estimated": true
+    },
+    "dashscope:qwen3.8-flash": {
+      "score": 73.7,
+      "estimated": true
+    },
+    "dashscope:qwen3.8-max": {
+      "score": 80,
+      "estimated": true
+    },
+    "dashscope:qwen3.8-27b": {
+      "score": 82.7,
+      "estimated": true
+    },
+    "dashscope:deepseek-v4-flash": {
+      "score": 77.3,
+      "estimated": true
+    },
+    "dashscope:deepseek-v4-pro": {
+      "score": 81.8,
+      "estimated": true
+    },
+    "dashscope:glm-5.3": {
+      "score": 80,
+      "estimated": true
+    },
+    "huggingface:meta-llama/Llama-3.3-70B-Instruct": {
+      "score": 77.3,
+      "estimated": true
+    },
+    "huggingface:openai/gpt-oss-120b": {
+      "score": 88.1,
+      "estimated": true
+    },
+    "huggingface:zai-org/GLM-5.3-Flash": {
+      "score": 67.4,
+      "estimated": true
+    },
+    "tokenharbor:deepseek-v4.1-flash:free": {
+      "score": 68.3,
+      "estimated": true
+    },
+    "tokenharbor:deepseek-v4-flash:free": {
+      "score": 77.3,
+      "estimated": true
+    }
+  }
+}

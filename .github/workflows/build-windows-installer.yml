@@ -1,0 +1,77 @@
+name: Build Windows installer
+
+# Builds the one-folder app + FFmpeg/FFprobe/Deno + Inno Setup installer with packaging/build_windows.ps1.
+#  * Actions -> "Build Windows installer" -> Run workflow        -> download the artifact
+#  * push a tag like v1.0.0                                       -> the installer is attached to a GitHub release
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write        # needed to attach the installer to a release
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # requirements.txt supports 3.12 - 3.14; 3.13 is the version the installer is built with.
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Create the virtual environment the build script expects
+        run: python -m venv .venv
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build the app, the bundled tools and the installer
+        shell: pwsh
+        run: ./packaging/build_windows.ps1
+
+      - name: Show what was produced
+        shell: pwsh
+        run: |
+          Get-ChildItem dist -Recurse -File |
+            Select-Object FullName, @{Name = "MB"; Expression = { [math]::Round($_.Length / 1MB, 1) } } |
+            Format-Table -AutoSize
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Subtitle-Studio-Setup
+          path: dist/installer/*.exe
+          if-no-files-found: error
+
+      - name: Upload the portable folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Subtitle-Studio-portable
+          path: dist/AI Subtitle Studio/**
+          if-no-files-found: warn
+
+      - name: Attach the installer to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $setup = Get-ChildItem dist/installer -Filter *.exe |
+            Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $setup) { throw "No installer was built" }
+          $tag = "${{ github.ref_name }}"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "AI Subtitle Studio $tag" --generate-notes
+          }
+          gh release upload $tag $setup.FullName --clobber
