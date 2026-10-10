@@ -18,6 +18,7 @@ import os
 import shutil
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
@@ -47,6 +48,7 @@ from app.core.llm_translation import BlockResult
 from app.core.translation import TranslationBackend
 from app.providers.base import AUTO, SubtitleEvidence, SubtitleProvider, SubtitleRequest, collect_evidence
 from app.services.hardware_detection import EnginePlan
+from app.services.resources import AI, CPU, GPU, NET, ResourceSet
 from app.utils.atomic import JsonlWriter, atomic_write_json, load_jsonl, read_json
 from app.utils.hashing import file_fingerprint, stable_hash
 from app.utils.languages import AUTO_DETECT
@@ -106,6 +108,59 @@ class JobResult:
     series: dict = field(default_factory=dict)
 
 
+_RUNNING_KEYS: set[str] = set()
+_RUNNING_KEYS_COND = threading.Condition()
+
+
+@contextmanager
+def _exclusive_job(job_key: str, cancel: threading.Event):
+    """Jobs of the same input share one job folder; when the same video is queued twice, the second waits for the
+    first (and then finds its cached stages) instead of writing the same files at the same time (D-120)."""
+    with _RUNNING_KEYS_COND:
+        while job_key in _RUNNING_KEYS:
+            if cancel.is_set():
+                raise JobCancelled()
+            _RUNNING_KEYS_COND.wait(0.2)
+        _RUNNING_KEYS.add(job_key)
+    try:
+        yield
+    finally:
+        with _RUNNING_KEYS_COND:
+            _RUNNING_KEYS.discard(job_key)
+            _RUNNING_KEYS_COND.notify_all()
+
+
+class _ThreadFilter(logging.Filter):
+    """Pass only log records written by the registered threads (one job's threads)."""
+
+    def __init__(self):
+        super().__init__()
+        self._threads: set[int] = set()
+
+    def add_current(self) -> None:
+        self._threads.add(threading.get_ident())
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.thread in self._threads
+
+
+class _Diarization:
+    """State of one background speaker-detection run, shared between its thread and the job thread."""
+
+    def __init__(self, key: str, cached: bool = False):
+        self.key = key
+        self.cached = cached
+        self.thread: threading.Thread | None = None
+        self.cancel = threading.Event()
+        self.turns: list | None = None
+        self.error: BaseException | None = None
+        self.fraction = 0.0
+        self.started: float | None = None
+
+    def set_fraction(self, fraction: float) -> None:
+        self.fraction = float(fraction)
+
+
 class Pipeline:
     def __init__(
         self,
@@ -128,6 +183,8 @@ class Pipeline:
         video_quality: str = "best",
         snap_shots: bool = False,
         keep_cache: bool = True,
+        resources: ResourceSet | None = None,
+        priority=0,
     ):
         if not asr_plans or not mt_plans:
             raise ValueError("At least one ASR plan and one translation plan are required")
@@ -168,6 +225,12 @@ class Pipeline:
         self._snap_shots = bool(snap_shots)         # snap cue edges to shot changes (D-103), off by default
         self._keep_cache = bool(keep_cache)         # False: the job folder is removed after a successful export
         self._finished = False
+        # Machine resources shared with the other jobs of the queue (D-120). A pipeline on its own gets private gates,
+        # so it never waits; `priority` orders waiting jobs (the queue position: lower goes first).
+        self._resources = resources if resources is not None else ResourceSet()
+        self._priority = priority
+        self._log_threads: _ThreadFilter | None = None
+        self._waited = 0.0                  # seconds this job waited for resources other jobs held
 
     # -- helpers ---------------------------------------------------------------------------
 
@@ -200,6 +263,19 @@ class Pipeline:
     def _warn(self, message: str) -> None:
         log.warning(message)
         self.warnings.append(message)
+
+    @contextmanager
+    def _using(self, resource: str, stage: str):
+        """Hold one slot of a machine resource for the work inside the block. While another job holds it, the UI
+        shows "waiting for ..." (a progress message without stage progress); a cancel ends the wait at once."""
+        def waiting() -> None:
+            log.info("Waiting for the %s (stage %s)", resource, stage)
+            self._notify(f"waiting:{resource}:{stage}")
+
+        asked = time.monotonic()
+        with self._resources.gate(resource).hold(self._priority, self.cancel, waiting):
+            self._waited += time.monotonic() - asked
+            yield
 
     def _manifest_path(self, stage: str) -> Path:
         return self.job_dir / "stages" / f"{stage}.json"
@@ -318,6 +394,10 @@ class Pipeline:
         if self._downloader is None:
             raise PipelineError("URL input requires a downloader", "error.download_failed")
         self._record("download", "running", key)
+        with self._using(NET, "download"):
+            self._download_now(key, time.monotonic())     # the stage's time starts when it got its slot
+
+    def _download_now(self, key: str, started: float) -> None:
         self._progress("download", 0.0, "probing")
         info = self._downloader.probe(self.config.source_url)
         note = getattr(self._downloader, "access_note", None)
@@ -371,37 +451,87 @@ class Pipeline:
         self.stats["series"] = detected.to_dict()
         log.info("Series info: %s", detected.to_dict())
 
-    def _stage_diarize(self, key: str, doc: dict, audio) -> None:
-        """Who speaks when (CPU, after the GPU stage). Sets `speaker` ("S1", "S2", ...) on the master segments;
-        any failure only costs the speaker labels (D-098)."""
+    def _diarize_wanted(self) -> bool:
+        return self._diarizer is not None and bool(self._asr_settings.get("diarization", True))
+
+    def _start_diarize(self, key: str, audio) -> "_Diarization | None":
+        """Start "who speaks when" on the CPU in the background (D-098, D-120).
+
+        It needs only the audio, so it runs while the GPU transcribes the same episode. The thread waits for a CPU
+        slot itself; everything that touches the job database stays on the job's own thread (`_finish_diarize`).
+        Returns None when the stage is skipped or its result is cached."""
+        if not self._diarize_wanted():
+            return None
+        if self._cached("diarize", key):
+            return _Diarization(key, cached=True)
+        self._record("diarize", "running", key)
+        job = _Diarization(key)
+        options = self._asr_options()
+
+        def work() -> None:
+            if self._log_threads is not None:
+                self._log_threads.add_current()
+            try:
+                with self._resources.gate(CPU).hold(self._priority, job.cancel):
+                    job.started = time.monotonic()
+                    windows = plan_windows(audio, options.vad_threshold)
+                    job.turns = self._diarizer(audio, windows, self.job_dir / f"diarize.{key}.partial.jsonl",
+                                               job.set_fraction, job.cancel)
+            except BaseException as exc:          # noqa: BLE001 - handed to the job thread in _finish_diarize
+                job.error = exc
+
+        job.thread = threading.Thread(target=work, name=f"diarize-{self.job_key}", daemon=True)
+        job.thread.start()
+        return job
+
+    def _stop_diarize(self, job: "_Diarization | None") -> None:
+        """Stop a background diarization whose result is no longer wanted (the job failed or was cancelled)."""
+        if job is not None and job.thread is not None:
+            job.cancel.set()
+            job.thread.join(30.0)
+
+    def _finish_diarize(self, job: "_Diarization | None", doc: dict) -> None:
+        """Wait for the background diarization, then put its speaker labels on the master segments. Any failure only
+        costs the speaker labels (D-098)."""
         started = time.monotonic()
-        if self._diarizer is None or not self._asr_settings.get("diarization", True):
+        if job is None:
             self._skip_stage("diarize", "disabled" if self._diarizer else "not available")
             return
+        key = job.key
         out_name = f"diarize.{key}.json"
-        self._record("diarize", "running", key)
-        cached = None
-        try:
-            cached = self._cached("diarize", key)
-            if cached:
-                turns = [tuple(t) for t in read_json(self.job_dir / out_name)["turns"]]
-            else:
-                turns = self._diarizer(
-                    audio, plan_windows(audio, self._asr_options().vad_threshold),
-                    self.job_dir / f"diarize.{key}.partial.jsonl",
-                    lambda f: self._progress("diarize", f), self.cancel)
+        if job.cached:
+            turns = [tuple(t) for t in read_json(self.job_dir / out_name)["turns"]]
+        else:
+            try:
+                told = False
+                while job.thread.is_alive():
+                    if self.cancel.wait(0.5):
+                        job.cancel.set()
+                        job.thread.join(30.0)
+                        raise JobCancelled()
+                    if job.started is None:          # still waiting for another job's speaker detection
+                        if not told:
+                            self._notify(f"waiting:{CPU}:diarize")
+                            told = True
+                    else:
+                        self._progress("diarize", job.fraction)
+                if job.error is not None:
+                    raise job.error
+                turns = job.turns or []
                 atomic_write_json(self.job_dir / out_name, {"turns": [list(t) for t in turns]})
                 self._complete("diarize", key, [out_name], {"turns": len(turns)})
-        except JobCancelled:
-            raise
-        except Exception as exc:
-            self._warn(f"Speaker detection failed ({type(exc).__name__}: {exc}); continuing without speaker labels")
-            self._record("diarize", "failed", key, str(exc))
-            self._finish_stage("diarize", started, None, cached=False, error=str(exc))
-            return
+            except JobCancelled:
+                raise
+            except Exception as exc:
+                self._warn(f"Speaker detection failed ({type(exc).__name__}: {exc}); continuing without speaker labels")
+                self._record("diarize", "failed", key, str(exc))
+                self._finish_stage("diarize", started, None, cached=False, error=str(exc))
+                return
+            if job.started is not None:
+                started = job.started             # report the stage's own run time, not only the wait for it
         names = diarize.apply_labels(doc, turns)
         self._record("diarize", "completed", key)
-        self._finish_stage("diarize", started, doc["media"]["duration"], cached=bool(cached), speakers=len(names))
+        self._finish_stage("diarize", started, doc["media"]["duration"], cached=job.cached, speakers=len(names))
 
     def _stage_subtitles(self, key: str, doc: dict) -> list[dict]:
         """Collect subtitle evidence from all providers and score same-language tracks against the ASR."""
@@ -514,6 +644,79 @@ class Pipeline:
         os.replace(tmp, path)
         log.info("Audio enhanced in %.1f s", time.monotonic() - started)
         return result
+
+    def _transcribe_key(self, audio_key: str, language: str, enhanced_audio: bool) -> str:
+        return stable_hash({
+            "v": PIPELINE_VERSION, "audio": audio_key, "language": language,
+            "model": self._asr_plans[0].model, "beam": self._params["asr_beam"],
+            "engine": "whisper", "enhance": enhance.VERSION if enhanced_audio else 0,
+            "filter": ASR_FILTER_VERSION, "vad": self._asr_options().vad_parameters(),
+            "batch": self._asr_options().batch_size,
+        })
+
+    def _known_language(self, audio_key: str) -> str | None:
+        """The source language when it is already known without the GPU (set by the user, or detected earlier)."""
+        if self.config.source_language != AUTO_DETECT:
+            return self.config.source_language
+        path = self.job_dir / f"language.{audio_key}.json"
+        try:
+            return read_json(path)["language"] if path.is_file() else None
+        except (OSError, ValueError, KeyError):
+            return None
+
+    def _speech_stages(self, audio_key: str, wav: Path, duration: float) -> tuple[dict, str]:
+        """Voice separation (CPU), speech recognition (GPU) and speaker detection (CPU, in parallel with the GPU).
+
+        Each part holds only the machine resource it uses, so other episodes of the queue can use the rest (D-120):
+        the next episode's voice separation or speaker detection runs while this one is on the GPU."""
+        audio = load_wav(wav)
+        asr_audio = audio
+        enhanced = self._enhance_wanted()
+        if enhanced:
+            known = self._known_language(audio_key)
+            if known is not None and self._cached("transcribe", self._transcribe_key(audio_key, known, True)):
+                asr_audio = None             # cached transcript: the voice-only audio is loaded only if still needed
+            else:
+                try:
+                    with self._using(CPU, "transcribe"):
+                        asr_audio = self._enhanced_audio(audio_key, audio)
+                except (JobCancelled, PipelineError):
+                    raise
+                except Exception as exc:
+                    self._warn(f"Audio enhancement failed ({exc}); transcribing the original audio")
+                    enhanced = False
+                    asr_audio = audio
+        diarize_key = stable_hash({"v": PIPELINE_VERSION, "audio": audio_key, "diarize": diarize.VERSION,
+                                   "enhance": enhance.VERSION if enhanced else 0,
+                                   "vad": self._asr_options().vad_threshold})
+        diarization = None
+        try:
+            if asr_audio is None and self._diarize_wanted() and not self._cached("diarize", diarize_key):
+                with self._using(CPU, "transcribe"):
+                    asr_audio = self._enhanced_audio(audio_key, audio)
+            if asr_audio is not None:
+                diarization = self._start_diarize(diarize_key, asr_audio)
+            elif self._diarize_wanted():
+                diarization = _Diarization(diarize_key, cached=True)
+            with self._using(GPU, "transcribe"):
+                try:
+                    language, probability = self._resolve_language(audio_key, audio)
+                    if language == self.config.target_language:
+                        self._warn(f"Source language {language} equals the target language")
+                    transcribe_key = self._transcribe_key(audio_key, language, enhanced)
+                    if asr_audio is not audio:
+                        del audio                # language known: only the voice-only audio is needed now
+                    doc, transcribe_key = self._stage_transcribe(
+                        transcribe_key, asr_audio, language, probability, duration,
+                        alt_audio=(lambda: load_wav(wav)) if enhanced else None)
+                finally:
+                    self._release_asr()      # GPU memory is free before the next job gets the GPU
+            del asr_audio
+            self._finish_diarize(diarization, doc)
+            diarization = None
+        finally:
+            self._stop_diarize(diarization)
+        return doc, transcribe_key
 
     def _stage_transcribe(self, key: str, audio, language: str, language_probability: float | None,
                           duration: float, alt_audio: Callable | None = None) -> tuple[dict, str]:
@@ -643,7 +846,35 @@ class Pipeline:
             log.info("Resuming translation: %d of %d units cached", len(done), len(units))
         remaining = [u for u in units if u.id not in done]
         if remaining:
-            self._release_asr()   # Free GPU memory before loading the translation model.
+            # The local model needs the GPU: one job at a time, and its memory is freed before the slot is (D-120).
+            with self._using(GPU, "translate"):
+                started = time.monotonic()           # waiting for the GPU is not part of the stage's own time
+                self._release_asr()
+                try:
+                    self._translate_units(units, done, remaining, partial, source_language, target_language)
+                finally:
+                    self._release_mt()
+
+        result_units = []
+        previous = None
+        for unit in units:
+            record = done[unit.id]
+            flags = check_line(unit.text, record["text"], target_language, previous)
+            previous = (unit.text, record["text"])
+            result_units.append({**unit.to_dict(), "translation": record["text"], "engine": record["engine"],
+                                 "flags": flags})
+
+        result = {"source_language": source_language, "target_language": target_language, "units": result_units}
+        atomic_write_json(self.job_dir / out_name, result)
+        engines = sorted({u["engine"] for u in result_units})
+        self._complete("translate", key, [out_name], {"units": len(result_units), "engines": engines})
+        self._record("translate", "completed", key)
+        self._finish_stage("translate", started, duration, cached=False, units=len(result_units), engines=engines)
+        return result
+
+    def _translate_units(self, units, done: dict, remaining: list, partial: Path, source_language: str,
+                         target_language: str) -> None:
+        """Translate `remaining` with the local engine, moving to the next plan when one fails at runtime."""
         while remaining:
             backend = self._ensure_mt()
             try:
@@ -672,23 +903,6 @@ class Pipeline:
                 self._warn(f"Translation failed on {plan.device} ({exc}); continuing with the next plan")
                 self._release_mt()
                 self._mt_index += 1
-
-        result_units = []
-        previous = None
-        for unit in units:
-            record = done[unit.id]
-            flags = check_line(unit.text, record["text"], target_language, previous)
-            previous = (unit.text, record["text"])
-            result_units.append({**unit.to_dict(), "translation": record["text"], "engine": record["engine"],
-                                 "flags": flags})
-
-        result = {"source_language": source_language, "target_language": target_language, "units": result_units}
-        atomic_write_json(self.job_dir / out_name, result)
-        engines = sorted({u["engine"] for u in result_units})
-        self._complete("translate", key, [out_name], {"units": len(result_units), "engines": engines})
-        self._record("translate", "completed", key)
-        self._finish_stage("translate", started, duration, cached=False, units=len(result_units), engines=engines)
-        return result
 
     def _link_input_video(self, out_dir: Path, stem: str, paths: dict) -> None:
         """Put the local video next to its subtitle: a hard link (no extra disk space) when possible."""
@@ -735,6 +949,10 @@ class Pipeline:
         if not missing:
             return translation
         log.info("Translating %d lines with the offline fallback engine", len(missing))
+        with self._using(GPU, "export"):
+            return self._fill_missing_now(translation, missing)
+
+    def _fill_missing_now(self, translation: dict, missing: list[dict]) -> dict:
         # Runs after all AI work: an engine failure moves on to the next plan, and if every plan fails the job
         # still exports (those lines stay empty and are flagged) instead of losing the finished translation.
         while missing:
@@ -914,6 +1132,11 @@ class Pipeline:
         if self._refiner_factory is None:
             self._skip_stage("refine", "disabled")
             return translation
+        with self._using(AI, "refine"):
+            return self._refine_now(key, translation, duration, time.monotonic())
+
+    def _refine_now(self, key: str, translation: dict, duration: float, started: float) -> dict:
+        out_name = f"refined.{key}.json"
         self._record("refine", "running", key)
         source_language = translation["source_language"]
         target_language = translation["target_language"]
@@ -1092,8 +1315,10 @@ class Pipeline:
             fps = frames.video_fps(self._media_path)
             shots = None
             if fps and self._snap_shots:
-                self._progress("export", 0.0, "detecting_shots")
-                shots = frames.shot_changes(self._media_path, self.job_dir / "shots.json", cancel=self.cancel) or None
+                with self._using(CPU, "export"):
+                    self._progress("export", 0.0, "detecting_shots")
+                    shots = frames.shot_changes(self._media_path, self.job_dir / "shots.json",
+                                                cancel=self.cancel) or None
             return fps, shots
         except JobCancelled:
             raise
@@ -1170,6 +1395,17 @@ class Pipeline:
 
     def run(self) -> JobResult:
         if self.config.source_url:
+            key = stable_hash({"url": self.config.source_url.strip()})
+        else:
+            key = stable_hash({"input": file_fingerprint(self.config.input_path)}) \
+                if self.config.input_path.is_file() else None
+        if key is None:
+            return self._run()
+        with _exclusive_job(key, self.cancel):
+            return self._run()
+
+    def _run(self) -> JobResult:
+        if self.config.source_url:
             identity = {"url": self.config.source_url.strip()}
         else:
             input_path = self.config.input_path
@@ -1183,6 +1419,10 @@ class Pipeline:
 
         handler = logging.FileHandler(self.job_dir / "job.log", encoding="utf-8")
         handler.setFormatter(logging.Formatter(LOG_FORMAT))
+        # Several jobs run at once (D-120): this job's log keeps only the lines of its own threads.
+        self._log_threads = _ThreadFilter()
+        self._log_threads.add_current()
+        handler.addFilter(self._log_threads)
         root = logging.getLogger()
         root.addHandler(handler)
         started = time.monotonic()
@@ -1197,38 +1437,7 @@ class Pipeline:
             audio_key = stable_hash({"v": PIPELINE_VERSION, **identity})
             wav, duration = self._stage_audio(audio_key)
             self._notify(f"media_duration:{duration}")   # ETA only; no stage progress
-            audio = load_wav(wav)
-            language, probability = self._resolve_language(audio_key, audio)
-            if language == self.config.target_language:
-                self._warn(f"Source language {language} equals the target language")
-            enhanced = self._enhance_wanted()
-
-            def transcribe_key_for(enhanced_audio: bool) -> str:
-                return stable_hash({
-                    "v": PIPELINE_VERSION, "audio": audio_key, "language": language,
-                    "model": self._asr_plans[0].model, "beam": self._params["asr_beam"],
-                    "engine": "whisper", "enhance": enhance.VERSION if enhanced_audio else 0,
-                    "filter": ASR_FILTER_VERSION, "vad": self._asr_options().vad_parameters(),
-                    "batch": self._asr_options().batch_size,
-                })
-
-            transcribe_key = transcribe_key_for(enhanced)
-            if enhanced and not self._cached("transcribe", transcribe_key):
-                try:
-                    audio = self._enhanced_audio(audio_key, audio)
-                except (JobCancelled, PipelineError):
-                    raise
-                except Exception as exc:
-                    self._warn(f"Audio enhancement failed ({exc}); transcribing the original audio")
-                    transcribe_key = transcribe_key_for(False)
-            used_enhanced = enhanced and transcribe_key == transcribe_key_for(True)
-            doc, transcribe_key = self._stage_transcribe(
-                transcribe_key, audio, language, probability, duration,
-                alt_audio=(lambda: load_wav(wav)) if used_enhanced else None)
-            self._stage_diarize(stable_hash({"v": PIPELINE_VERSION, "transcribe": transcribe_key,
-                                             "diarize": diarize.VERSION}), doc, audio)
-            del audio
-            self._release_asr()
+            doc, transcribe_key = self._speech_stages(audio_key, wav, duration)
             self.stats["asr"] = doc.get("asr", {"engine": "whisper"})
             subtitles_key = stable_hash({
                 "v": PIPELINE_VERSION, "transcribe": transcribe_key, "target": self.config.target_language,
@@ -1271,7 +1480,8 @@ class Pipeline:
             self.stats.update({
                 "media_duration_s": round(duration, 2),
                 "total_elapsed_s": round(time.monotonic() - started, 2),
-                "language": language,
+                "waited_s": round(self._waited, 2),
+                "language": doc["language"]["code"],
             })
             out_dir, outputs = self._stage_export(doc, translation, evidence)
             self._finished = True

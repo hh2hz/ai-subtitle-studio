@@ -1,10 +1,10 @@
 ; Inno Setup script for AI Subtitle Studio. Compiled by packaging\build_windows.ps1:
-;   ISCC.exe /DMyAppVersion=1.0.0 packaging\installer.iss
+;   ISCC.exe /DMyAppVersion=1.0.1 packaging\installer.iss
 ; Per-user install (no administrator rights needed); user data in %LOCALAPPDATA%\AISubtitleStudio is kept on
 ; uninstall. NVIDIA GPU libraries are downloaded by the app on first use (D-043).
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.0.1"
 #endif
 #define MyAppName "AI Subtitle Studio"
 #define MyAppExe "AISubtitleStudio.exe"

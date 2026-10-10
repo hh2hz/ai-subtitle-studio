@@ -151,11 +151,18 @@ def test_queue_eta_sums_the_pending_jobs(qtbot, translator, settings, db, tmp_pa
 
     w = MainWindow(translator, settings, RuntimeContext(db_path=db.path, pipeline_factory=None))
     qtbot.addWidget(w)
+    settings.set("parallel_jobs", 1)
     with patch("app.ui.main_window.eta.media_duration", return_value=100.0):
         w.add_files_to_queue(media)
         w._update_queue_eta()
-    # Two pending jobs of 100 s of media each, learned ratio 0.5 -> 100 s for the queue.
+    # One video after the other: two pending jobs of 100 s of media each, learned ratio 0.5 -> 100 s for the queue.
     assert w.queue_eta_label.text() == translator.t("queue.total_eta", eta="01:40")
+
+    # In parallel (D-120) the two jobs overlap: no resource is busier than one whole job (GPU 2 x 17 s, AI 2 x 20 s
+    # over two slots), so the queue takes as long as its longest job.
+    settings.set("parallel_jobs", 4)
+    w._update_queue_eta()
+    assert w.queue_eta_label.text() == translator.t("queue.total_eta", eta="00:50")
 
 
 def test_queue_eta_unknown_without_history_and_cleared_when_idle(qtbot, translator, settings, db, tmp_path):

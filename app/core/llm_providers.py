@@ -586,11 +586,25 @@ class HealthStore:
     provider name. Reading and writing never raise: a broken file only means "no memory".
     """
 
+    _shared: dict[str, "HealthStore"] = {}
+    _shared_lock = threading.Lock()
+
     def __init__(self, path=None, clock=time.time):
         self.path = path
         self._clock = clock
         self._entries: dict[str, dict] = {}
+        self._lock = threading.RLock()
         self._load()
+
+    @classmethod
+    def shared(cls, path) -> "HealthStore":
+        """One store per file for the whole process: jobs running at the same time see each other's failures at once
+        (D-120) instead of only when the next job starts."""
+        with cls._shared_lock:
+            key = os.path.abspath(str(path))
+            if key not in cls._shared:
+                cls._shared[key] = cls(path)
+            return cls._shared[key]
 
     def _load(self) -> None:
         if self.path is None:
@@ -606,15 +620,17 @@ class HealthStore:
     def active(self) -> dict[str, float]:
         """key -> seconds still remembered."""
         now = self._clock()
-        return {k: v["until"] - now for k, v in self._entries.items() if v["until"] > now}
+        with self._lock:
+            return {k: v["until"] - now for k, v in self._entries.items() if v["until"] > now}
 
     def record(self, key: str, seconds: float, reason: str = "") -> None:
         now = self._clock()
         until = now + seconds
-        if self._entries.get(key, {}).get("until", 0) >= until:
-            return
-        self._entries[key] = {"until": until, "reason": reason[:120]}
-        self._save(now)
+        with self._lock:
+            if self._entries.get(key, {}).get("until", 0) >= until:
+                return
+            self._entries[key] = {"until": until, "reason": reason[:120]}
+            self._save(now)
 
     def _save(self, now: float) -> None:
         if self.path is None:
@@ -630,6 +646,69 @@ class HealthStore:
             log.debug("Could not save the provider health file", exc_info=True)
 
 
+class SharedRouteState:
+    """Short cool-downs (rate limits, overloaded servers) that every job of this process honours (D-120).
+
+    The free API keys are the same for all jobs, so a model that answered "429, wait 60 s" to one episode must not be
+    asked again by the episode translated next to it. Failures that last longer are kept by the HealthStore."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._until: dict[str, float] = {}
+
+    def cool_down(self, key: str, until: float) -> None:
+        with self._lock:
+            self._until[key] = max(self._until.get(key, 0.0), until)
+
+    def until(self, key: str) -> float:
+        with self._lock:
+            return self._until.get(key, 0.0)
+
+
+SHARED_ROUTES = SharedRouteState()
+
+
+class LatencyMemory:
+    """Reply times of every model, shared by all jobs of the process and kept across restarts (D-120).
+
+    `ChatClient.timeout_for` sets a model's read timeout from its recent reply times, but each job used to start with
+    no history: a good but slow model (one that needs 70-140 s) first timed out at 60 s and was then asked the same
+    question again with a longer timeout. With the history of earlier jobs the first request already waits long
+    enough."""
+
+    def __init__(self, path=None):
+        self.path = path
+        self._lock = threading.Lock()
+        self._models: dict[str, dict[str, list[float]]] = {}       # provider -> model -> seconds
+        if path is not None:
+            try:
+                data = json.loads(open(path, encoding="utf-8").read())
+            except (OSError, ValueError):
+                data = {}
+            for provider, models in (data.items() if isinstance(data, dict) else ()):
+                if isinstance(models, dict):
+                    self._models[provider] = {m: [float(x) for x in v if isinstance(x, (int, float))][-20:]
+                                              for m, v in models.items() if isinstance(v, list)}
+
+    def for_provider(self, name: str) -> dict[str, list[float]]:
+        with self._lock:
+            return self._models.setdefault(name, {})
+
+    def save(self) -> None:
+        if self.path is None:
+            return
+        with self._lock:
+            data = {p: {m: list(v[-20:]) for m, v in models.items() if v} for p, models in self._models.items()}
+        try:
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            tmp = f"{self.path}.tmp"
+            with open(tmp, "w", encoding="utf-8") as handle:
+                json.dump(data, handle)
+            os.replace(tmp, self.path)
+        except OSError:
+            log.debug("Could not save the model latency file", exc_info=True)
+
+
 @dataclass
 class ProviderPool:
     """All usable models of all providers as one quality-ranked list, with per-model cool-down."""
@@ -640,6 +719,8 @@ class ProviderPool:
     disabled: dict[str, str] = field(default_factory=dict)              # provider name -> reason
     failures: dict[str, int] = field(default_factory=dict)              # route key -> failed requests
     health: HealthStore | None = None                                   # failures remembered across jobs
+    shared: SharedRouteState | None = None                              # cool-downs shared with running jobs
+    slow: set[str] = field(default_factory=set)                         # routes that timed out on a summary request
 
     def apply_health(self) -> list[str]:
         """Start this job with what earlier jobs learned: remembered failures begin as cool-downs."""
@@ -683,14 +764,21 @@ class ProviderPool:
         """Usable routes, best first. exclude: route keys or provider names."""
         now = time.monotonic()
         exclude = exclude or set()
+        # Failures another running job just learned (HealthStore) and its short cool-downs count here as well.
+        remembered = self.health.active() if self.health is not None else {}
+        shared = self.shared
         return [r for r in self.routes()
                 if r.provider not in self.disabled
                 and self.cooldown_until.get(r.key, 0) <= now and self.cooldown_until.get(r.provider, 0) <= now
+                and r.key not in remembered and r.provider not in remembered
+                and (shared is None or (shared.until(r.key) <= now and shared.until(r.provider) <= now))
                 and r.key not in exclude and r.provider not in exclude
                 and (min_score is None or r.score >= min_score)]
 
     def cool_down(self, key: str, seconds: float) -> None:
         self.cooldown_until[key] = time.monotonic() + seconds
+        if self.shared is not None:
+            self.shared.cool_down(key, self.cooldown_until[key])
 
     def disable(self, name: str, reason: str) -> None:
         self.disabled[name] = reason

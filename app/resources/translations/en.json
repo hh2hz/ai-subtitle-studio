@@ -401,6 +401,20 @@
     "update.busy": "A job is running. Finish or cancel it, then update.",
     "review.preview_preparing": "This video format cannot be played here. Preparing a compatible preview copy...",
     "review.preview_failed": "The video cannot be played here and a preview copy could not be made. You can still review and edit the subtitles.",
-    "error.preview_failed": "The preview copy could not be created."
+    "error.preview_failed": "The preview copy could not be created.",
+    "label.parallel_jobs": "Videos in progress at the same time",
+    "tip.parallel_jobs": "Queue videos are processed like a production line: while one is on the graphics card, the next one downloads, another has its speakers detected and two more are translated by the AI. Heavy work still runs one video at a time on the graphics card and one at a time on the processor. 1 = one video after the other.",
+    "status.waiting_resource": "{stage}: waiting for the {resource}…",
+    "status.more_jobs": "{text}  (+{count} more in progress)",
+    "resource.net": "download slot",
+    "resource.gpu": "graphics card (GPU)",
+    "resource.cpu": "processor (CPU)",
+    "resource.ai": "AI translation slot",
+    "queue.status_waiting": "Waiting: {resource}",
+    "resource_short.net": "download",
+    "resource_short.gpu": "GPU",
+    "resource_short.cpu": "CPU",
+    "resource_short.ai": "AI",
+    "queue.playlist_loading": "Reading the playlist… the window stays usable."
   }
 }

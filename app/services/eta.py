@@ -68,6 +68,9 @@ def timings_from_stats(stats_list: list[dict]) -> Timings:
                 used = True
         media = stats.get("media_duration_s")
         total = stats.get("total_elapsed_s")
+        waited = stats.get("waited_s")
+        if isinstance(total, (int, float)) and isinstance(waited, (int, float)) and 0 <= waited < total:
+            total = total - waited          # time spent waiting for another job's resource is not this job's work
         if isinstance(media, (int, float)) and isinstance(total, (int, float)) and media > 0 and total > 0:
             ratios.append(float(total) / float(media))
             totals.append(float(total))
@@ -147,3 +150,75 @@ def media_duration(path: Path) -> float | None:
         log.debug("Could not read the duration of %s", path, exc_info=True)
     return None
 
+
+
+# -- several jobs at once (D-120) ----------------------------------------------------------------
+
+#: The machine resource each stage waits for (app.services.resources); None = no shared resource.
+STAGE_RESOURCE = {"download": "net", "audio": None, "transcribe": "gpu", "diarize": "cpu", "subtitles": None,
+                  "translate": "gpu", "refine": "ai", "export": None}
+
+
+def _stage_split(timings: Timings, duration: float | None) -> dict[str, float]:
+    """Typical seconds per stage for a job of this length (only the stages this machine has timings for)."""
+    split = {}
+    for name in STAGES:
+        if duration and timings.stage_rtf.get(name) is not None:
+            split[name] = timings.stage_rtf[name] * float(duration)
+        elif timings.stage_seconds.get(name) is not None:
+            split[name] = timings.stage_seconds[name]
+    return split
+
+
+def _by_resource(stage_seconds: dict[str, float]) -> dict[str | None, float]:
+    out: dict[str | None, float] = {}
+    for name, seconds in stage_seconds.items():
+        resource = STAGE_RESOURCE.get(name)
+        out[resource] = out.get(resource, 0.0) + seconds
+    return out
+
+
+def running_job_split(timings: Timings, stage: str, duration: float | None, fraction: float) -> dict[str, float]:
+    """Seconds left per stage of a running job (the running stage scaled by its share left)."""
+    if stage not in STAGES:
+        return {}
+    split = _stage_split(timings, duration)
+    current = STAGES.index(stage)
+    left = {name: seconds for name, seconds in split.items() if STAGES.index(name) > current}
+    if stage in split:
+        left[stage] = split[stage] * _share_left(fraction)
+    return left
+
+
+def pending_job_split(timings: Timings, duration: float | None) -> dict[str, float] | None:
+    """Seconds per stage of a job that has not started: its whole length divided like the typical job."""
+    total = pending_job_seconds(timings, duration)
+    if total is None:
+        return None
+    split = _stage_split(timings, duration)
+    known = sum(split.values())
+    if known <= 0:
+        return {"": total}                     # no per-stage history: the whole job counts as one block
+    return {name: total * seconds / known for name, seconds in split.items()}
+
+
+def queue_remaining(jobs: list[dict[str, float]], parallel: int,
+                    capacity: dict[str, int] | None = None) -> float | None:
+    """Seconds until every job is done when up to `parallel` jobs run at once and each stage waits for its
+    resource. A lower-bound style estimate: the busiest resource, the longest single job, or all work divided over the
+    parallel jobs, whichever is largest. With parallel = 1 this is the plain sum of the jobs."""
+    if not jobs:
+        return 0.0
+    parallel = max(1, int(parallel))
+    capacity = capacity or {"net": 2, "gpu": 1, "cpu": 1, "ai": 2}
+    totals = [sum(job.values()) for job in jobs]
+    if parallel == 1:
+        return sum(totals)
+    per_resource: dict[str, float] = {}
+    for job in jobs:
+        for resource, seconds in _by_resource(job).items():
+            if resource:
+                per_resource[resource] = per_resource.get(resource, 0.0) + seconds
+    bounds = [max(totals), sum(totals) / min(parallel, len(jobs))]
+    bounds += [seconds / max(1, capacity.get(resource, 1)) for resource, seconds in per_resource.items()]
+    return max(bounds)

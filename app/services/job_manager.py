@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import atexit
 import gc
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
 
@@ -12,7 +14,8 @@ from PySide6.QtCore import QThread, Signal
 
 from app.core.downloader import YtDlpAdapter, access_options
 from app.core.errors import JobCancelled, PipelineError
-from app.core.llm_providers import HealthStore, ModelRanking, ProviderCallError, ProviderPool, build_clients
+from app.core.llm_providers import (SHARED_ROUTES, HealthStore, LatencyMemory, ModelRanking, ProviderCallError,
+                                    ProviderPool, build_clients)
 from app.core.modes import Mode
 from app.core.transcription import AsrEngine, AsrOptions
 from app.utils.paths import default_data_root, model_ranking_files
@@ -28,8 +31,22 @@ from app.providers.youtube import PlatformSubtitleProvider
 from app.services import hardware_detection
 from app.services.api_keys import load_keys
 from app.services.hardware_detection import EnginePlan
+from app.services.resources import SHARED as SHARED_RESOURCES
 
 log = logging.getLogger(__name__)
+
+_latency: LatencyMemory | None = None
+_latency_lock = threading.Lock()
+
+
+def shared_latency(path) -> LatencyMemory:
+    """Reply times of the cloud models for every job of this process; saved when the application exits."""
+    global _latency
+    with _latency_lock:
+        if _latency is None:
+            _latency = LatencyMemory(path)
+            atexit.register(_latency.save)
+        return _latency
 
 # (config, cancel_event, progress_fn, recorder, extras) -> Pipeline
 PipelineFactory = Callable[..., Pipeline]
@@ -59,19 +76,32 @@ class RefinerFactory:
 
     def __call__(self, source_language: str, target_language: str, media: dict) -> LlmRefiner | None:
         clients = build_clients(self._load_keys())
-        usable = []
+        latency = shared_latency(Path(self._health_path).with_name("model_latency.json"))
+        latency.save()                       # what earlier jobs of this session learned survives a crash
         for client in clients:
+            client.latency = latency.for_provider(client.name)
+
+        def discover(client):
             try:
-                models = client.discover_models()
+                return client.discover_models()
             except ProviderCallError as exc:
-                log.warning("Provider %s unusable: %s", client.name, exc)
+                return exc
+
+        # The model lists are fetched in parallel (about 20 providers, 0.3-3 s each, one after another before).
+        with ThreadPoolExecutor(max_workers=8, thread_name_prefix="discover") as executor:
+            found = list(executor.map(discover, clients))
+        usable = []
+        for client, models in zip(clients, found):
+            if isinstance(models, ProviderCallError):
+                log.warning("Provider %s unusable: %s", client.name, models)
                 continue
             if models:
                 log.info("Provider %s models: %s", client.name, models)
                 usable.append(client)
         if not usable:
             return None
-        pool = ProviderPool(usable, self._load_ranking(), health=HealthStore(self._health_path))
+        pool = ProviderPool(usable, self._load_ranking(), health=HealthStore.shared(self._health_path),
+                            shared=SHARED_ROUTES)
         remembered = pool.apply_health()
         if remembered:
             log.info("Skipping %d model/provider entries that failed recently: %s", len(remembered),
@@ -168,6 +198,8 @@ def default_pipeline_factory(jobs_dir: Path, models_dir: Path, data_dir: Path) -
             snap_shots=bool(extras.get("snap_to_shots", False)),
             video_quality=str(extras.get("video_quality") or "best"),
             keep_cache=bool(extras.get("keep_job_cache", False)),
+            resources=SHARED_RESOURCES,
+            priority=extras.get("queue_priority", 0),
         )
     return factory
 

@@ -95,8 +95,12 @@ def _ask(pool, system: str, payload: dict, parse, label: str, sleep):
     from app.core.llm_translation import extract_json
 
     tried: set[str] = set()
+    slow = getattr(pool, "slow", None)
+    slow = slow if slow is not None else set()
     for _ in range(MAX_ATTEMPTS):
-        routes = pool.available(exclude=tried)
+        # A model that timed out on one summary request is not asked the next one (brief parts, speaker map): the
+        # log showed the same model waste 60 s on each of them in every episode (D-120).
+        routes = pool.available(exclude=tried | slow)
         if not routes:
             break
         route = routes[0]
@@ -113,6 +117,8 @@ def _ask(pool, system: str, payload: dict, parse, label: str, sleep):
             log.warning("%s: %s returned nothing usable", label, route.key)
         except (ProviderCallError, ValueError) as exc:
             log.warning("%s: %s failed (%s)", label, route.key, str(exc)[:160])
+            if getattr(exc, "timed_out", False):
+                slow.add(route.key)
             wait = getattr(exc, "retry_after", None)
             if wait and not pool.available(exclude=tried) and wait <= MAX_WAIT_S:
                 sleep(wait)                     # no other provider left: wait once, then the same one again

@@ -70,11 +70,14 @@ Notes: a model folder counts as installed only when it contains `.download-compl
 
 While a job runs the input, language, mode, series and quality controls are disabled.
 
+Queued videos run like a production line (version 1.0.1): up to "Videos in progress at the same time" (default 4) are in progress at once, but every step waits for the part of the computer it really uses. Two downloads at a time; one video at a time on the graphics card (speech recognition, the built-in AI translator); one at a time on the processor (voice separation, speaker detection); two at a time with the cloud AI. A video that waits shows "Waiting: GPU" (or CPU, AI, download) in the queue, and the progress bar follows the earliest video in progress. The first video of the queue is always served first. The same video queued twice is processed one copy after the other (both use the same working folder).
+
 **4. The Settings window: every option**
 
 Speech recognition:
-- "Difficult audio (music, noise, quiet speech)" = `audio_enhance`, default `off`; the other choices are "Automatic (on in Maximum accuracy)" and "Always clean the audio". Cleaning costs 15-20 % more time and no accuracy gain is proven, so it stays off by default; turn it on for music or heavy noise.
+- "Difficult audio (music, noise, quiet speech)" = `audio_enhance`, default `off`; the other choices are "Automatic (on in Maximum accuracy)" and "Always clean the audio". Cleaning costs 15-20 % more time on short test clips, but on the design laptop it took about 12 minutes per 105-minute episode (more than the speech recognition itself), and no accuracy gain is proven, so it stays off by default; turn it on for music or heavy noise.
 - "Detect who is speaking (runs on the CPU)" = `diarization`, default on (section 9).
+- "Videos in progress at the same time" = `parallel_jobs`, default 4 (1 to 6). 1 processes the queue one video after the other, as before version 1.0.1. Higher values only help while some part of the computer is idle; each video in progress keeps its audio in memory (about 400 MB for 100 minutes).
 - "Snap subtitle times to scene changes (slower)" = `snap_to_shots`, default off; it moves a start or end that is within 0.25 s of a cut onto the cut and adds minutes per episode. Frame snapping is always on.
 
 Translation:
@@ -174,7 +177,7 @@ Confidence (HIGH, MEDIUM, LOW) comes from the line's flags plus its audio confid
 
 **9. Diarization and speakers**
 
-"Detect who is speaking" (`diarization`, default on) runs after transcription on the CPU: sherpa-onnx pyannote segmentation 3.0 plus 3D-Speaker CAM++ embeddings, pinned by SHA-256 and stored under `models\diarization`. It takes a few minutes per episode (a 60 s smoke test with one thread took 20.8 s while a GPU job ran; a measurement on a free CPU is still pending). Master segments get a speaker id ("S1", "S2", ...) which the translation uses for gender and who is addressed. A failure only costs the speaker labels: the job continues with "Speaker detection failed (...); continuing without speaker labels". When two speakers share one cue, the line is written as two dash-prefixed lines (`- ` by default, from the language style guide) for automatic translations; a line you edited keeps your text.
+"Detect who is speaking" (`diarization`, default on) runs after transcription on the CPU: sherpa-onnx pyannote segmentation 3.0 plus 3D-Speaker CAM++ embeddings, pinned by SHA-256 and stored under `models\diarization`. It runs in a separate process at below-normal priority, at the same time as the speech recognition of the same episode (it needs only the audio). Measured on the design laptop (Ryzen 7 3750H): 14 to 25 minutes per 105-minute episode. Before version 1.0.1 it ran inside the application, and the library it uses holds Python's interpreter lock for each 10-minute block of audio, which froze the window ("Not responding") for more than a minute at a time. Master segments get a speaker id ("S1", "S2", ...) which the translation uses for gender and who is addressed. A failure only costs the speaker labels: the job continues with "Speaker detection failed (...); continuing without speaker labels". When two speakers share one cue, the line is written as two dash-prefixed lines (`- ` by default, from the language style guide) for automatic translations; a line you edited keeps your text.
 
 **10. Caches, resume and maintenance**
 
@@ -204,7 +207,8 @@ Keep from the output folder: the final `<title>.<lang>.srt` next to the video (p
 - Translation quality is not verified against a human reference: the project has no reference subtitle set, so no accuracy claim is made for the ASR or the AI changes.
 - The target of under 3 GB peak RAM for a 100-minute episode is not met: the measured peak with windowed transcription is about 3.68 GB (3.88 GB without windows), dominated by the model and the CUDA libraries.
 - Batched decoding is available but off by default: a 15 % speed-up came with 8-10 segments per 5 minutes instead of 51-88, which destroys sentence-level segments.
-- Speaker detection has no speed measurement on a free CPU yet, and snapping to scene changes is unit-tested with a fake FFmpeg only, not on a real video.
+- Speaker detection finds far too many speakers on long episodes (about 200 voice ids in a 105-minute episode): the voices of different 10-minute blocks are often not linked. Snapping to scene changes is unit-tested with a fake FFmpeg only, not on a real video.
+- Running several videos at once does not create more free AI quota: the daily limits of the free models are the same, they are only used up sooner.
 - The AI double check and the condense step need free cloud quota; without it the basic translation is kept and the lines are flagged for review.
 
 ## Running an episode again from scratch

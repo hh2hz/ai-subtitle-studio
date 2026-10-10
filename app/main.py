@@ -52,7 +52,7 @@ SELF_TEST_MODULES = (
     "ctranslate2", "faster_whisper", "av", "numpy", "yt_dlp", "yt_dlp_ejs", "anyascii", "sherpa_onnx",
     "sentencepiece", "huggingface_hub", "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets",
     "app.core.diarize", "app.core.frames", "app.core.platform_text", "app.core.redecode", "app.core.risk",
-    "app.core.windows",
+    "app.core.windows", "app.services.diarize_worker", "app.services.resources",
 )
 
 # Every file the code loads from app/resources: the UI catalogues, the icon set the stylesheet points at
@@ -147,6 +147,11 @@ def main(argv: list[str] | None = None) -> int:
         from app.services.dependency_check import overlay_probe_main
 
         return overlay_probe_main(argv[1], argv[2])
+    if argv[:1] == ["--diarize-worker"] and len(argv) == 2:
+        # Child-process speaker detection (see app.services.diarize_worker, D-120).
+        from app.services.diarize_worker import main as diarize_main
+
+        return diarize_main(argv[1])
     if argv[:1] == ["--gpu-probe"]:
         # Child-process GPU check used by the frozen executable (see app.services.gpu_probe).
         from app.services.gpu_probe import run_probe

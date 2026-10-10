@@ -17,7 +17,7 @@ def test_round_trip_across_reopen(tmp_path):
         "fetch_platform_subtitles": False, "opensubtitles_api_key": "k1", "subdl_api_key": "k2",
         "llm_refine": True, "llm_correct_only": True, "llm_review": True, "burn_video": True,
         "translation_engine": "madlad", "local_model": "gemma3:4b", "audio_enhance": "on",
-        "name_normalization": False, "diarization": False, "snap_to_shots": True,
+        "name_normalization": False, "diarization": False, "snap_to_shots": True, "parallel_jobs": 2,
         "cookies_source": "browser", "cookies_browser": "firefox",
         "cookies_file": "C:\\Users\\x\\cookies.txt", "force_ipv4": True,
         "video_quality": "720", "window_geometry": "01d9d0cb0003", "window_geometry_version": 2,

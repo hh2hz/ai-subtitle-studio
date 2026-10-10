@@ -56,8 +56,11 @@ def diarizer(models_dir):
     from app.core import diarize
 
     def run(audio, windows, partial, progress=None, cancel=None):
+        from app.services import diarize_worker
+
         diarize.ensure_models(models_dir)
-        return diarize.diarize(audio, models_dir, windows, partial, progress=progress, cancel=cancel)
+        # In a child process: the sherpa-onnx call holds Python's GIL for minutes and froze the window (D-120).
+        return diarize_worker.run(audio, models_dir, windows, partial, progress=progress, cancel=cancel)
     return run
 
 

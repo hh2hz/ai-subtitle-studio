@@ -1588,3 +1588,64 @@ and squashing the queue table against activity logs when maximized.
 - Not done: prompting when "Improve with cloud" is enabled without keys.
 - Tests: tests/test_api_keys_dialog.py (22).
 
+## D-120 - 1.0.1: several videos at once, no frozen window (2026-10-10)
+
+Measured first, on the user's last three Kurtlar Vadisi episodes (103-113 min of media, Maximum accuracy, GTX 1650
+4 GB, Ryzen 7 3750H; `stats` in the user's database and `app.log`):
+
+| stage | minutes | resource |
+|---|---|---|
+| download | 1.0-1.7 | network |
+| audio extraction | 2.3-2.6 | disk/CPU |
+| voice separation (`audio_enhance` = auto) | 11.6-12.1 | CPU |
+| speech recognition (large-v3 int8_float16) | 6.4-9.4 | GPU |
+| speaker detection | 14.4-15.0 | CPU |
+| cloud AI translation | 26.8-42.9 | network |
+| total | 79-92 | |
+
+- The speech recognition is about 10 % of a job. The cloud AI (95-130 requests one after the other, about 17 s each;
+  12-13 read timeouts of 60-150 s per episode) and the two CPU stages are the rest.
+- "Not responding": sherpa-onnx's `OfflineSpeakerDiarization.process` binding has no `gil_scoped_release` (checked in
+  the sherpa-onnx source; the voice separation `process` and the embedding `compute` do release it). One call works on
+  a 10-minute window, so the whole process, GUI thread included, stood still for 80-100 s per window, about ten times
+  per episode. Reproduced here: 15.7-28.5 s stall per window on the server CPU in process, 0.02 s with the worker
+  (`tests/integration/test_real_diarize_worker.py`, identical turns).
+- Audio extraction was suspected but is not the cause: PyAV extracts 20 minutes of AAC in 3.2 s and of Opus in 5.8 s
+  here, the FFmpeg command line 4.2 s and 6.8 s. It was left as it is; on the laptop the time is disk and decode.
+
+Changes:
+- `app/services/diarize_worker.py`: speaker detection in a child process (`--diarize-worker`, below-normal priority,
+  audio handed over as .npy, progress file, partial JSONL unchanged so resume still works, kill on cancel).
+- `app/services/resources.py`: gates `net` 2, `gpu` 1, `cpu` 1, `ai` 2, served strictly by queue position
+  (priority = (queue_order, job id)), cancel ends a wait. A thread never waits for a gate while holding another, so
+  they cannot deadlock. The pipeline holds: download -> net; voice separation, speaker detection, shot detection ->
+  cpu; language detection + transcription + re-decoding, local translation, offline fill -> gpu (the model is released
+  before the slot); refine (provider discovery, brief, blocks) -> ai. Audio extraction, subtitles and export hold none.
+- Speaker detection starts on a background thread as soon as the audio is ready and runs next to the transcription;
+  only the job thread writes to the job database. Its cache key no longer depends on the transcript key (it never
+  used the transcript): `{audio, diarize.VERSION, enhance version, vad threshold}`.
+- Same input twice: `_exclusive_job` makes the second job wait for the first (shared job folder); it then reuses the
+  cached stages when `keep_job_cache` is on.
+- `job.log` keeps only the lines of the job's own threads (`_ThreadFilter`); `app.log` keeps everything.
+- Main window: `_runners` (job id -> runner), `parallel_jobs` setting (default 4, 1-6; 1 = old behaviour). The progress
+  bar follows the earliest job; each queue row shows its own progress or "Waiting: GPU/CPU/AI/download". Playlists
+  are read on a worker thread (`app/ui/playlist_loader.py`); the 1-second timer no longer reads the database; burns
+  of episodes that finish together are queued.
+- Queue ETA (`eta.queue_remaining`): the largest of the busiest resource (seconds / capacity), the longest job and all
+  work over the parallel jobs; equal to the old sum when `parallel_jobs` = 1. `waited_s` (time spent waiting for
+  another job's resource) is excluded from the learned job ratio, and gated stages start their clock after the wait.
+- Cloud AI: `HealthStore.shared()` per file and a process-wide `SharedRouteState`, so a model that timed out or was
+  rate limited for one episode is skipped at once by the episode next to it; `LatencyMemory` (`model_latency.json`)
+  keeps reply times across jobs and restarts, so a slow but good model gets its long timeout on the first request
+  instead of a 60 s timeout and a second request. A model that timed out on the episode brief is not asked again
+  for the other brief parts and the speaker map (it was, 60 s each, in every episode). Provider model lists are
+  fetched in parallel.
+- Not done, on purpose: translating the blocks of one episode in parallel. Each block gets the final translation of
+  the block before it and the names fixed so far; parallel blocks would lose that and accuracy comes first.
+- Not changed: `audio_enhance` keeps its meaning ("auto" = on in Maximum accuracy). On this machine it costs about
+  12 minutes per episode with no proven gain; the user's setting is "auto".
+- Expected effect (estimate, not measured on the laptop): a queue finishes one episode about every 25-30 minutes
+  instead of every 80-90 (the CPU stages become the limit with voice separation on, about 15 minutes per episode
+  without it, then the AI). A single episode gains only the overlap of speaker detection with transcription and the
+  saved AI timeouts. The free daily AI quota is not increased by running in parallel.
+- Tests: tests/test_parallel_jobs.py (18), tests/integration/test_real_diarize_worker.py.

@@ -8,7 +8,8 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QGroupBox,
-    QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QSpinBox, QVBoxLayout,
+    QWidget,
 )
 
 from app.core.downloader import COOKIE_BROWSERS
@@ -54,6 +55,11 @@ class ProviderSettingsDialog(QDialog):
         self.shots_check.setChecked(settings.get("snap_to_shots"))
         self.shots_check.setToolTip(t("tip.snap_to_shots"))
         speech_form.addRow(self.shots_check)
+        self.parallel_spin = QSpinBox()
+        self.parallel_spin.setRange(1, 6)
+        self.parallel_spin.setValue(settings.get("parallel_jobs"))
+        self.parallel_spin.setToolTip(t("tip.parallel_jobs"))
+        speech_form.addRow(t("label.parallel_jobs"), self.parallel_spin)
         layout.addWidget(speech)
 
         translation = QGroupBox(t("group.translation"))
@@ -237,6 +243,7 @@ class ProviderSettingsDialog(QDialog):
         self._settings.set("audio_enhance", self.enhance_combo.currentData())
         self._settings.set("diarization", self.diarization_check.isChecked())
         self._settings.set("snap_to_shots", self.shots_check.isChecked())
+        self._settings.set("parallel_jobs", self.parallel_spin.value())
         self._settings.set("fetch_platform_subtitles", self.platform_check.isChecked())
         self._settings.set("burn_video", self.burn_check.isChecked())
         self._settings.set("keep_job_cache", self.keep_cache_check.isChecked())

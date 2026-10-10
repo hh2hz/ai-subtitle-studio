@@ -37,6 +37,8 @@ DEFAULTS: dict[str, Any] = {
     "audio_enhance": "off",      # music/noise removal + quiet speech boost: "auto" (Maximum accuracy), "on", "off";
                                  # off by default until it is shown to help (D-046)
     "diarization": True,         # speaker detection on the CPU after transcription (D-098)
+    "parallel_jobs": 4,          # queue videos in progress at the same time; each stage still waits for its resource
+                                 # (downloads 2, GPU 1, CPU 1, cloud AI 2) (D-120). 1 = one video after the other
     "snap_to_shots": False,      # snap cue edges to shot changes within 250 ms (D-103); slower, so off by default
     "name_normalization": True,  # deterministic name normalisation (D-058, task 2.6)
     # Site access (D-073). Cookie values are never read, copied, stored or logged by us: yt-dlp opens the
@@ -69,6 +71,7 @@ _VALIDATORS: dict[str, Callable[[Any], bool]] = {
     "translation_engine": lambda v: v in ("local", "madlad"),
     "local_model": lambda v: bool(v.strip()),
     "audio_enhance": lambda v: v in ("auto", "on", "off"),
+    "parallel_jobs": lambda v: 1 <= v <= 6,
     "cookies_source": lambda v: v in ("", "browser", "file"),
     "cookies_browser": lambda v: v == "" or v in COOKIE_BROWSERS,
     "cookies_file": lambda v: v == "" or v.lower().endswith(".txt"),

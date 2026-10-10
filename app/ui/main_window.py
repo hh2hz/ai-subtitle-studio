@@ -51,6 +51,8 @@ from app.ui.burn_runner import BurnRunner
 from app.ui.icons import app_icon
 from app.utils.open_folder import open_folder
 from app.ui.link_probe import LinkProbe
+from app.ui.playlist_loader import _ACTIVE as _PLAYLIST_LOADERS
+from app.ui.playlist_loader import PlaylistLoader
 from app.ui.queue_window import BatchQueueDialog
 from app.ui.series_picker import SeriesSuggestions
 from app.ui.settings_window import ProviderSettingsDialog
@@ -95,7 +97,16 @@ class MainWindow(QMainWindow):
         self._poster_cache_dir = (
             runtime.cache_dir if runtime is not None and runtime.cache_dir else default_data_root() / "cache"
         ) / "posters"
-        self._runner: JobRunner | None = None
+        # Jobs in progress, in start order (several at once, D-120). The first one is shown in the progress bar.
+        self._runners: dict[int, JobRunner] = {}
+        self._runner_override = None     # a stand-in set by tests through the `_runner` property
+        self._job_state: dict[int, dict] = {}
+        self._row_updated: dict[int, tuple[float, str]] = {}
+        self._pending_cache: list[dict] | None = None
+        self._batch_started = 0.0
+        self._burn_pending: list[Path] = []
+        self._start_after_playlist = False
+        self._adding_for_start = False
         self._queue_running = False
         self._queue_cancelled = False
         self._job_times: list[float] = []
@@ -128,6 +139,49 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, self._fit_to_screen)
 
     # -- construction ----------------------------------------------------------------------
+
+    @property
+    def _runner(self):
+        """The job the progress bar shows: the earliest of the jobs in progress (tests may set a stand-in)."""
+        if self._runner_override is not None:
+            return self._runner_override
+        return next(iter(self._runners.values()), None)
+
+    @_runner.setter
+    def _runner(self, value) -> None:
+        self._runner_override = value
+
+    def _focus_job_id(self) -> int | None:
+        runner = self._runner
+        return getattr(runner, "job_id", None) if runner is not None else None
+
+    def _sender_job_id(self) -> int | None:
+        """The job whose runner sent the signal being handled; the shown job for a direct call."""
+        sender = self.sender()
+        job_id = getattr(sender, "job_id", None) if sender is not None else None
+        return job_id if job_id is not None else self._focus_job_id()
+
+    def _row_of(self, job_id) -> int:
+        for r in range(self.queue_table.rowCount()):
+            item = self.queue_table.item(r, 1)
+            if item and item.data(Qt.ItemDataRole.UserRole) == job_id:
+                return r
+        return -1
+
+    def _set_row_status(self, job_id, status: str | None = None, eta_text: str | None = None) -> None:
+        row = self._row_of(job_id)
+        if row < 0:
+            return
+        if status is not None and self.queue_table.item(row, 2):
+            self.queue_table.item(row, 2).setText(status)
+        if eta_text is not None and self.queue_table.item(row, 3):
+            self.queue_table.item(row, 3).setText(eta_text)
+
+    def _parallel_limit(self) -> int:
+        try:
+            return max(1, int(self._settings.get("parallel_jobs")))
+        except (KeyError, TypeError, ValueError):
+            return 1
 
     def _restore_geometry(self) -> bool:
         """Restore the saved window geometry; False when there is nothing usable to restore (D-109, D-111)."""
@@ -658,7 +712,11 @@ class MainWindow(QMainWindow):
     # -- job control -----------------------------------------------------------------------
 
     def is_running(self) -> bool:
-        return self._runner is not None and self._runner.isRunning()
+        if self._runner_override is not None:
+            return self._runner_override.isRunning()
+        # A job counts until the window has handled its end (`_on_runner_finished` removes it), so a finished
+        # thread whose results are not shown yet is still "running" (D-120).
+        return bool(self._runners)
 
     @Slot()
     def _on_start_or_cancel(self) -> None:
@@ -781,7 +839,7 @@ class MainWindow(QMainWindow):
             self, self._tr.t("queue.dialog_playlist_title"),
             self._tr.t("queue.dialog_playlist_prompt"))
         if ok and url.strip():
-            self.add_playlist_to_queue(url.strip())
+            self._load_playlist_async(url.strip())
 
     @Slot()
     def _on_add_current_to_queue(self) -> None:
@@ -798,7 +856,10 @@ class MainWindow(QMainWindow):
 
         if is_url(text):
             if "list=" in text and "watch?v=" not in text:
-                self.add_playlist_to_queue(text)
+                # Translate pressed with a playlist link: the queue starts once the playlist is read. The queue
+                # window's "Add" only adds it.
+                self._start_after_playlist = self._start_after_playlist or self._adding_for_start
+                self._load_playlist_async(text)
             else:
                 if self._runtime:
                     db = Database(self._runtime.db_path)
@@ -866,6 +927,7 @@ class MainWindow(QMainWindow):
         return self.add_files_to_queue(files)
 
     def add_playlist_to_queue(self, url: str) -> list[int]:
+        """Read a playlist and queue its videos (blocking; the window uses `_load_playlist_async`)."""
         if not url or self._runtime is None:
             return []
         downloader = getattr(self._runtime, "downloader", None) or YtDlpAdapter()
@@ -875,7 +937,36 @@ class MainWindow(QMainWindow):
             log.exception("Playlist extraction failed")
             self._report(self._tr.t("queue.playlist_error", error=str(exc)), level=logging.WARNING)
             return []
-        if not entries:
+        return self._enqueue_playlist_entries(entries)
+
+    def _load_playlist_async(self, url: str) -> None:
+        """Read the playlist on a worker thread: yt-dlp needs network requests per page (D-120)."""
+        if self._runtime is None:
+            self._start_after_playlist = False
+            return
+        downloader = getattr(self._runtime, "downloader", None) or YtDlpAdapter()
+        loader = PlaylistLoader(url, downloader.extract_playlist)
+        loader.loaded.connect(self._on_playlist_loaded)
+        loader.failed.connect(self._on_playlist_failed)
+        self._report(self._tr.t("queue.playlist_loading"))
+        loader.start()
+
+    @Slot(str, list)
+    def _on_playlist_loaded(self, url: str, entries: list) -> None:
+        self._enqueue_playlist_entries(entries)
+        if self._start_after_playlist:
+            self._start_after_playlist = False
+            if not self.is_running() and self._pending_queue_jobs():
+                self.start_queue()
+
+    @Slot(str, str)
+    def _on_playlist_failed(self, url: str, error: str) -> None:
+        self._start_after_playlist = False
+        log.warning("Playlist extraction failed for %s: %s", url, error)
+        self._report(self._tr.t("queue.playlist_error", error=error), level=logging.WARNING)
+
+    def _enqueue_playlist_entries(self, entries: list) -> list[int]:
+        if not entries or self._runtime is None:
             return []
         db = Database(self._runtime.db_path)
         job_ids = []
@@ -950,15 +1041,18 @@ class MainWindow(QMainWindow):
         finally:
             db.close()
 
-    def _pending_queue_jobs(self) -> list[dict]:
+    def _pending_queue_jobs(self, refresh: bool = True) -> list[dict]:
         if self._runtime is None:
             return []
-        db = Database(self._runtime.db_path)
-        try:
-            queue = JobsRepo(db).get_queue()
-        finally:
-            db.close()
-        return [job for job in queue if job.get("status") in ("pending", "paused")]
+        if refresh or self._pending_cache is None:
+            db = Database(self._runtime.db_path)
+            try:
+                queue = JobsRepo(db).get_queue()
+            finally:
+                db.close()
+            self._pending_cache = [job for job in queue
+                                   if job.get("status") in ("pending", "paused") and job["id"] not in self._runners]
+        return list(self._pending_cache)
 
     def _probe_duration(self, path: str | None) -> float | None:
         """Media length of a queued local file, read once and remembered for this window."""
@@ -970,38 +1064,58 @@ class MainWindow(QMainWindow):
         return self._duration_cache[path]
 
     def _job_remaining_seconds(self) -> float | None:
-        """Seconds until the running job is done: the stage model, or the elapsed share as a fallback."""
+        """Seconds until the shown job is done: the stage model, or the elapsed share as a fallback."""
         if not self.is_running():
             return None
-        remaining = eta.job_remaining(self._timings, self._current_stage,
-                                      self._job_media_duration, self._stage_fraction)
+        return self._remaining(self._current_stage, self._job_media_duration, self._stage_fraction,
+                               self._job_started, self._last_overall)
+
+    def _remaining(self, stage: str, duration, fraction: float, started: float, overall: float) -> float | None:
+        remaining = eta.job_remaining(self._timings, stage, duration, fraction)
         if remaining is not None:
             return remaining
-        elapsed = time.monotonic() - self._job_started
-        if self._last_overall > 0.02:
-            return max(0.0, elapsed / self._last_overall - elapsed)
+        elapsed = time.monotonic() - started
+        if overall > 0.02:
+            return max(0.0, elapsed / overall - elapsed)
         return None
 
+    def _remaining_for(self, job_id) -> float | None:
+        state = self._job_state.get(job_id)
+        if state is None or job_id == self._focus_job_id():
+            return self._job_remaining_seconds()
+        return self._remaining(state["stage"], state["duration"], state["fraction"], state["started"],
+                               state["overall"])
+
     def _queue_eta_seconds(self, pending: list[dict]) -> float | None:
-        """Seconds until the whole queue is done: the running job plus every pending job."""
-        total = 0.0
+        """Seconds until the whole queue is done: the jobs in progress plus every pending job, with up to
+        `parallel_jobs` of them in the pipeline at once and each stage waiting for its resource (D-120)."""
+        jobs: list[dict[str, float]] = []
         if self.is_running():
-            remaining = self._job_remaining_seconds()
-            if remaining is None:
-                return None
-            total += remaining
+            for job_id in (list(self._runners) or [self._focus_job_id()]):
+                state = self._job_state.get(job_id)
+                if state is None or job_id == self._focus_job_id():
+                    stage, duration, fraction = self._current_stage, self._job_media_duration, self._stage_fraction
+                else:
+                    stage, duration, fraction = state["stage"], state["duration"], state["fraction"]
+                split = eta.running_job_split(self._timings, stage, duration, fraction)
+                if not split:
+                    remaining = self._remaining_for(job_id)
+                    if remaining is None:
+                        return None
+                    split = {"": remaining}
+                jobs.append(split)
         for job in pending:
             duration = (self._probe_duration(job.get("input_value"))
                         if job.get("input_type") == "file" else None)
-            seconds = eta.pending_job_seconds(self._timings, duration)
-            if seconds is None:
+            split = eta.pending_job_split(self._timings, duration)
+            if split is None:
                 return None
-            total += seconds
-        return total
+            jobs.append(split)
+        return eta.queue_remaining(jobs, self._parallel_limit())
 
-    def _update_queue_eta(self) -> None:
+    def _update_queue_eta(self, refresh: bool = True) -> None:
         """Show the total queue ETA in the queue card, or clear it when there is nothing to wait for."""
-        pending = self._pending_queue_jobs()
+        pending = self._pending_queue_jobs(refresh)
         if not pending and not self.is_running():
             self.queue_eta_label.clear()
             return
@@ -1086,7 +1200,14 @@ class MainWindow(QMainWindow):
             if self._runtime is None:
                 self._report(self._tr.t("status.pipeline_unavailable"), level=logging.WARNING)
                 return False
-            self._on_add_current_to_queue()
+            self._start_after_playlist = False
+            self._adding_for_start = True
+            try:
+                self._on_add_current_to_queue()
+            finally:
+                self._adding_for_start = False
+            if self._start_after_playlist:
+                return True                   # a playlist is being read; the queue starts when it is loaded
             db = Database(self._runtime.db_path)
             try:
                 repo = JobsRepo(db)
@@ -1104,7 +1225,8 @@ class MainWindow(QMainWindow):
         self._queue_running = True
         self._queue_cancelled = False
         self._refresh_timings()
-        return self._run_next_in_queue()
+        self._batch_started = time.monotonic()
+        return self._fill_slots()
 
     def cancel_job(self) -> None:
         self.cancel_queue()
@@ -1113,7 +1235,9 @@ class MainWindow(QMainWindow):
         self._queue_cancelled = True
         self._queue_running = False
         if self.is_running():
-            self._runner.request_cancel()
+            runners = list(self._runners.values()) or [self._runner_override]
+            for runner in runners:
+                runner.request_cancel()
             self.start_button.setEnabled(False)
             self._report(self._tr.t("status.cancelling"))
         else:
@@ -1133,31 +1257,43 @@ class MainWindow(QMainWindow):
                     eta_item.setText("-")
         self._update_queue_eta()
 
-    def _run_next_in_queue(self) -> bool:
+    def _fill_slots(self) -> bool:
+        """Start queued jobs until `parallel_jobs` are in progress (D-120). Each job's stages still wait for the
+        machine resource they use, so this only decides how many episodes are in the pipeline at once.
+        Returns True when a job was started."""
         if self._queue_cancelled or self._runtime is None:
+            if not self._runners:
+                self._queue_running = False
+                self._set_running_ui(False)
+            return False
+        started = False
+        while len(self._runners) < self._parallel_limit():
+            job = self._next_pending_job()
+            if job is None:
+                break
+            self._start_job_runner(job)
+            started = True
+        if not self._runners:
             self._queue_running = False
             self._set_running_ui(False)
-            self._runner = None
-            return False
+            self.progress_bar.setValue(100)
+        return started
 
+    def _next_pending_job(self) -> dict | None:
         db = Database(self._runtime.db_path)
         try:
-            repo = JobsRepo(db)
-            next_job = repo.next_pending_in_queue()
+            queue = JobsRepo(db).get_queue()
         finally:
             db.close()
+        self._pending_cache = None
+        return next((job for job in queue
+                     if job.get("status") in ("pending", "paused") and job["id"] not in self._runners), None)
 
-        if next_job is None:
-            self._queue_running = False
-            self._set_running_ui(False)
-            self._runner = None
-            self.progress_bar.setValue(100)
-            return False
-
+    def _start_job_runner(self, job: dict) -> None:
         qconfig = {}
-        if next_job.get("queue_config"):
+        if job.get("queue_config"):
             try:
-                qconfig = json.loads(next_job["queue_config"])
+                qconfig = json.loads(job["queue_config"])
             except Exception:
                 pass
         # Settings saved with the queue entry win; API keys always come from the current settings.
@@ -1165,15 +1301,15 @@ class MainWindow(QMainWindow):
         extras.update({k: v for k, v in self._current_extras().items() if k.endswith("_api_key")})
         series_dict = qconfig.get("series") or {}
         override = SeriesInfo(
-            series_name=series_dict.get("series_name") or next_job.get("series_name"),
-            season=series_dict.get("season") or next_job.get("season"),
-            episode=series_dict.get("episode") or next_job.get("episode"),
-            episode_title=series_dict.get("episode_title") or next_job.get("episode_title"),
-            year=series_dict.get("year") or next_job.get("year"),
+            series_name=series_dict.get("series_name") or job.get("series_name"),
+            season=series_dict.get("season") or job.get("season"),
+            episode=series_dict.get("episode") or job.get("episode"),
+            episode_title=series_dict.get("episode_title") or job.get("episode_title"),
+            year=series_dict.get("year") or job.get("year"),
             source="user",
         )
-        input_val = next_job["input_value"]
-        url = next_job["input_type"] == "url" or is_url(input_val)
+        input_val = job["input_value"]
+        url = job["input_type"] == "url" or is_url(input_val)
         if url and not js_runtime_available():
             self._report(self._tr.t("status.no_js_runtime"), level=logging.WARNING)
 
@@ -1181,35 +1317,49 @@ class MainWindow(QMainWindow):
             input_path=None if url else Path(input_val),
             source_url=input_val if url else None,
             series_override=override,
-            source_language=next_job["source_language"],
-            target_language=next_job["target_language"],
-            mode=Mode(next_job["mode"]),
-            output_dir=Path(next_job["output_dir"]) if next_job.get("output_dir") else None,
+            source_language=job["source_language"],
+            target_language=job["target_language"],
+            mode=Mode(job["mode"]),
+            output_dir=Path(job["output_dir"]) if job.get("output_dir") else None,
         )
 
-        self._runner = JobRunner(
-            config, self._runtime.db_path, self._runtime.pipeline_factory,
-            extras, self, job_id=next_job["id"],
-        )
-        self._runner.progress.connect(self._on_progress)
-        self._runner.succeeded.connect(self._on_succeeded)
-        self._runner.failed.connect(self._on_failed)
-        self._runner.cancelled.connect(self._on_cancelled)
-        self._runner.finished.connect(self._on_runner_finished)
-        self._set_running_ui(True)
-        # Fresh ETA inputs for the job that starts now (URLs announce their length from the pipeline).
-        self._current_stage = ""
-        self._stage_fraction = 0.0
-        self._last_overall = 0.0
-        self._job_media_duration = None if url else self._probe_duration(input_val)
-        self._job_started = time.monotonic()
-        self._elapsed_timer.start()
-        self._update_elapsed()
-        next_job["status"] = "running"
-        self._add_or_update_table_row(next_job, eta="--:--")
+        # Queue position decides who gets a busy resource first: the first episode is always finished first.
+        extras["queue_priority"] = (job.get("queue_order") or 0, job["id"])
+        runner = JobRunner(config, self._runtime.db_path, self._runtime.pipeline_factory, extras, self,
+                           job_id=job["id"])
+        runner.progress.connect(self._on_progress)
+        runner.succeeded.connect(self._on_succeeded)
+        runner.failed.connect(self._on_failed)
+        runner.cancelled.connect(self._on_cancelled)
+        runner.finished.connect(self._on_runner_finished)
+        first = not self._runners
+        self._runners[job["id"]] = runner
+        now = time.monotonic()
+        self._job_state[job["id"]] = {"stage": "", "fraction": 0.0, "overall": 0.0, "started": now,
+                                      "duration": None if url else self._probe_duration(input_val)}
+        if first:
+            self._set_running_ui(True)
+            self._sync_focus()
+            if not self._batch_started:
+                self._batch_started = now
+            self._elapsed_timer.start()
+            self._update_elapsed()
+        job["status"] = "running"
+        self._add_or_update_table_row(job, eta="--:--")
         self._report(self._tr.t("status.job_started", path=input_val))
-        self._runner.start()
-        return True
+        runner.start()
+
+    def _sync_focus(self) -> None:
+        """Show the earliest job in progress in the progress bar and keep the single-job ETA inputs in step."""
+        state = self._job_state.get(self._focus_job_id())
+        if state is None:
+            return
+        self._current_stage = state["stage"]
+        self._stage_fraction = state["fraction"]
+        self._last_overall = state["overall"]
+        self._job_media_duration = state["duration"]
+        self._job_started = state["started"]
+        self.progress_bar.setValue(int(state["overall"] * 100))
 
     def _set_running_ui(self, running: bool) -> None:
         for widget in (self.input_edit, self.input_browse_button, self.source_combo, self.target_combo,
@@ -1236,55 +1386,78 @@ class MainWindow(QMainWindow):
 
     @Slot(str, float, float, str)
     def _on_progress(self, stage: str, stage_fraction: float, overall: float, message: str) -> None:
+        job_id = self._sender_job_id()
+        state = self._job_state.get(job_id)
+        focus = job_id == self._focus_job_id()
         if message.startswith("media_duration:"):
             # Side channel from the pipeline: the media length, used for ETA maths only.
             try:
-                self._job_media_duration = float(message.split(":", 1)[1])
+                duration = float(message.split(":", 1)[1])
             except ValueError:
                 log.warning("Unexpected media duration message: %s", message)
+                return
+            if state is not None:
+                state["duration"] = duration
+            if focus:
+                self._job_media_duration = duration
             return
-        self._current_stage = stage
-        self._stage_fraction = stage_fraction
-        self._last_overall = overall
-        self.progress_bar.setValue(int(overall * 100))
-        if message.startswith("download:"):
-            text = self._tr.t("status.downloading", detail=message.split(":", 1)[1])
-        elif message == "detecting_language":
-            text = self._tr.t("status.detecting_language")
-        elif message == "probing":
-            text = self._tr.t("status.probing")
-        elif message == "enhancing_audio":
-            text = self._tr.t(f"status.{message}")
-        else:
-            stage_name = self._tr.t(f"stage.{stage}")
-            percent = int(stage_fraction * 100)
-            text = f"{stage_name} {percent}%"
-            remaining = eta.stage_remaining(self._timings, stage, self._job_media_duration, stage_fraction)
-            if remaining is not None:      # per-stage ETA from this machine's past real-time factors
-                text = self._tr.t("status.stage_eta", stage=stage_name, percent=percent,
-                                  eta=eta.format_eta(remaining))
-        self.stage_label.setText(text)
+        if message.startswith("waiting:"):
+            # Side channel: this job waits for a resource another job holds (D-120).
+            parts = message.split(":")
+            resource = parts[1] if len(parts) > 1 else ""
+            waiting_stage = parts[2] if len(parts) > 2 else stage
+            self._set_row_status(job_id, self._tr.t(
+                "queue.status_waiting", resource=self._tr.t(f"resource_short.{resource}", default=resource)))
+            if focus:
+                self.stage_label.setText(self._tr.t(
+                    "status.waiting_resource", stage=self._tr.t(f"stage.{waiting_stage}"),
+                    resource=self._tr.t(f"resource.{resource}", default=resource)))
+            return
+        if state is not None:
+            state.update(stage=stage, fraction=stage_fraction, overall=overall)
+        if focus:
+            self._current_stage = stage
+            self._stage_fraction = stage_fraction
+            self._last_overall = overall
+            self.progress_bar.setValue(int(overall * 100))
+            if message.startswith("download:"):
+                text = self._tr.t("status.downloading", detail=message.split(":", 1)[1])
+            elif message == "detecting_language":
+                text = self._tr.t("status.detecting_language")
+            elif message == "probing":
+                text = self._tr.t("status.probing")
+            elif message == "enhancing_audio":
+                text = self._tr.t(f"status.{message}")
+            else:
+                stage_name = self._tr.t(f"stage.{stage}")
+                percent = int(stage_fraction * 100)
+                text = f"{stage_name} {percent}%"
+                remaining = eta.stage_remaining(self._timings, stage, self._job_media_duration, stage_fraction)
+                if remaining is not None:      # per-stage ETA from this machine's past real-time factors
+                    text = self._tr.t("status.stage_eta", stage=stage_name, percent=percent,
+                                      eta=eta.format_eta(remaining))
+            others = len(self._runners) - 1
+            if others > 0:
+                text = self._tr.t("status.more_jobs", text=text, count=others)
+            self.stage_label.setText(text)
 
-        # Update ETA in queue table for current running job
-        if self._runner and getattr(self._runner, "job_id", None) is not None:
-            jid = self._runner.job_id
-            remaining = self._job_remaining_seconds()
-            eta_str = f"~{eta.format_eta(remaining)}" if remaining is not None else eta.UNKNOWN
-            for r in range(self.queue_table.rowCount()):
-                it = self.queue_table.item(r, 1)
-                if it and it.data(Qt.ItemDataRole.UserRole) == jid:
-                    st_it = self.queue_table.item(r, 2)
-                    if st_it:
-                        st_it.setText(f"{self._tr.t('queue.status_running')} ({int(overall * 100)}%)")
-                    eta_it = self.queue_table.item(r, 3)
-                    if eta_it:
-                        eta_it.setText(eta_str)
-                    break
+        # The job's queue row: at most four updates a second per job (segment-level progress is frequent).
+        if job_id is None:
+            return
+        now = time.monotonic()
+        last_time, last_stage = self._row_updated.get(job_id, (0.0, ""))
+        if stage == last_stage and now - last_time < 0.25 and not message:
+            return
+        self._row_updated[job_id] = (now, stage)
+        remaining = self._remaining_for(job_id)
+        eta_str = f"~{eta.format_eta(remaining)}" if remaining is not None else eta.UNKNOWN
+        self._set_row_status(job_id, f"{self._tr.t('queue.status_running')} ({int(overall * 100)}%)", eta_str)
 
     @Slot(object)
     def _on_succeeded(self, result: JobResult) -> None:
         self._last_output_dir = result.output_dir
-        self.progress_bar.setValue(100)
+        if len(self._runners) <= 1:           # other jobs still in progress keep the bar (D-120)
+            self.progress_bar.setValue(100)
         self._report(self._tr.t("status.completed", path=str(result.output_dir)))
         for path in result.outputs.values():
             self.log_view.appendPlainText(f"  {path}")
@@ -1332,18 +1505,9 @@ class MainWindow(QMainWindow):
         message = self._tr.t(ui_key, **(ui_args or {}))
         self._report(message, level=logging.ERROR)
         self.log_view.appendPlainText(f"  {technical}")
-        if self._runner and getattr(self._runner, "job_id", None) is not None:
-            jid = self._runner.job_id
-            for r in range(self.queue_table.rowCount()):
-                it = self.queue_table.item(r, 1)
-                if it and it.data(Qt.ItemDataRole.UserRole) == jid:
-                    st_it = self.queue_table.item(r, 2)
-                    if st_it:
-                        st_it.setText(self._tr.t("queue.status_failed"))
-                    eta_it = self.queue_table.item(r, 3)
-                    if eta_it:
-                        eta_it.setText("-")
-                    break
+        job_id = self._sender_job_id()
+        if job_id is not None:
+            self._set_row_status(job_id, self._tr.t("queue.status_failed"), "-")
         if not self._queue_running and not self._close_when_done:
             self._show_error(message, technical)
 
@@ -1354,42 +1518,51 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_runner_finished(self) -> None:
         sender = self.sender()
-        if sender is not None and self._runner is not None and sender is not self._runner:
+        job_id = getattr(sender, "job_id", None)
+        if job_id is None or self._runners.get(job_id) is not sender:
             return
-        self._elapsed_timer.stop()
-        self._update_elapsed()
+        del self._runners[job_id]
+        state = self._job_state.pop(job_id, None) or {}
+        self._row_updated.pop(job_id, None)
         self._refresh_timings()           # the finished job's timings feed the next job's ETA
-        dur = time.monotonic() - self._job_started if self._job_started else 0.0
+        dur = time.monotonic() - state["started"] if state.get("started") else 0.0
         self._job_times.append(dur)
-        if self._runner and getattr(self._runner, "job_id", None) is not None and self._runtime:
-            jid = self._runner.job_id
+        if self._runtime:
             db = Database(self._runtime.db_path)
             try:
                 repo = JobsRepo(db)
                 if self._queue_cancelled:
                     repo.cancel_queue()
-                job_row = repo.get(jid)
+                job_row = repo.get(job_id)
                 if job_row:
                     dur_str = f"{int(dur // 60):02d}:{int(dur % 60):02d}"
                     self._add_or_update_table_row(job_row, eta=dur_str)
             finally:
                 db.close()
-
+        self._pending_cache = None
         if self._queue_running and not self._queue_cancelled:
-            if self._run_next_in_queue():
-                return
+            self._fill_slots()
+        if self._runners:
+            self._sync_focus()
+            self._update_queue_eta()
+            return
 
+        self._elapsed_timer.stop()
+        self._update_elapsed()
+        self._batch_started = 0.0
         self._queue_running = False
         self._set_running_ui(False)
         self.stage_label.clear()
-        self._runner = None
         if self._close_when_done:
             self.close()
 
     def _update_elapsed(self) -> None:
-        seconds = int(time.monotonic() - self._job_started) if self._job_started else 0
+        start = self._batch_started or self._job_started
+        seconds = int(time.monotonic() - start) if start else 0
         self.elapsed_label.setText(self._tr.t("status.elapsed", time=time.strftime("%H:%M:%S", time.gmtime(seconds))))
-        self._update_queue_eta()          # the running job shrinks every second, so must the queue ETA
+        # The running jobs shrink every second, so must the queue ETA; the queue itself is read from the database only
+        # when it changed (this runs on the GUI thread every second).
+        self._update_queue_eta(refresh=False)
 
     def open_review(self, folder) -> None:
         if not folder:
@@ -1483,20 +1656,36 @@ class MainWindow(QMainWindow):
 
     def burn_video(self, episode_dir) -> None:
         """Save a copy of the episode video with the subtitles drawn into the picture."""
-        if not episode_dir or (self._burn_runner is not None and self._burn_runner.isRunning()):
+        if not episode_dir:
+            return
+        if self._burn_runner is not None and self._burn_runner.isRunning():
+            # Several episodes can finish close together now (D-120): burn them one after the other.
+            if Path(episode_dir) not in self._burn_pending:
+                self._burn_pending.append(Path(episode_dir))
             return
         self.burn_button.setEnabled(False)
-        self.stage_label.setText(self._tr.t("stage.burn"))
-        self.progress_bar.setValue(0)
         runner = BurnRunner(None, None, Path(episode_dir), self)
-        runner.progress.connect(lambda f: (self.progress_bar.setValue(int(f * 100)),
-                                           self.stage_label.setText(f"{self._tr.t('stage.burn')} {int(f * 100)}%")))
+        if self.is_running():
+            # The progress bar belongs to the jobs in progress; the burn reports in the status bar.
+            runner.progress.connect(lambda f: self.statusBar().showMessage(
+                f"{self._tr.t('stage.burn')} {int(f * 100)}%", 3000))
+        else:
+            self.stage_label.setText(self._tr.t("stage.burn"))
+            self.progress_bar.setValue(0)
+            runner.progress.connect(lambda f: (self.progress_bar.setValue(int(f * 100)),
+                                               self.stage_label.setText(f"{self._tr.t('stage.burn')} {int(f * 100)}%")))
         runner.succeeded.connect(lambda path: self._report(self._tr.t("status.burn_done", path=path)))
         runner.failed.connect(lambda error: self._report(self._tr.t("status.burn_failed", error=self._tr.t(error)),
                                                          level=logging.WARNING))
-        runner.finished.connect(lambda: self.burn_button.setEnabled(not self.is_running()))
+        runner.finished.connect(self._on_burn_finished)
         self._burn_runner = runner
         runner.start()
+
+    @Slot()
+    def _on_burn_finished(self) -> None:
+        self.burn_button.setEnabled(not self.is_running())
+        if self._burn_pending:
+            self.burn_video(self._burn_pending.pop(0))
 
     @Slot()
     def _open_output(self) -> None:
@@ -1546,6 +1735,8 @@ class MainWindow(QMainWindow):
 
         if not self.is_running():
             self.start_queue()
+        elif self._queue_running:
+            self._fill_slots()               # a free job slot takes it at once (D-120)
         return True
 
     def _show_error(self, message: str, details: str) -> None:
@@ -1570,6 +1761,9 @@ class MainWindow(QMainWindow):
                 runner.wait(10000)
         if self._update_runner is not None and self._update_runner.isRunning():
             self._update_runner.wait(12000)          # the request has a 10 s timeout
+        for loader in list(_PLAYLIST_LOADERS):
+            loader.wait(15000)                       # a running QThread must not be destroyed (D-106)
+        self._burn_pending.clear()
         if self.is_running():
             # Cancel first; completed stages and segments stay cached for the next run.
             self._close_when_done = True
